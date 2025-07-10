@@ -26,6 +26,8 @@ public class StreamCacheManager: ObservableObject {
     private let maxCacheAge: TimeInterval = 7 * 24 * 3600 // 7 days
     private let thumbnailCacheSize: Int64 = 100 * 1024 * 1024 // 100MB
     private let metadataCacheSize: Int64 = 50 * 1024 * 1024 // 50MB
+    private let intelligentCacheThreshold: Double = 0.8 // Start intelligent cleanup at 80% capacity
+    private let priorityCacheThreshold: Double = 0.9 // Aggressive cleanup at 90% capacity
     
     // Cache storage
     private let fileManager = FileManager.default
@@ -46,8 +48,11 @@ public class StreamCacheManager: ObservableObject {
     // Network session for downloads
     private let urlSession: URLSession
     
-    // Cache statistics
+    // Cache statistics and intelligence
     private var cacheStats = CacheStatistics()
+    private var accessPatterns: [String: AccessPattern] = [:]
+    private var smartCacheEnabled = true
+    private let priorityManager = CachePriorityManager()
     
     // MARK: - Initialization
     public init() {
@@ -212,9 +217,48 @@ public class StreamCacheManager: ObservableObject {
             if let cachedStream = self.streamCache[id] {
                 // Update last accessed time
                 self.streamCache[id]?.lastAccessed = Date()
+                
+                // Update access patterns for intelligent caching
+                self.updateAccessPattern(for: id)
+                
                 return cachedStream.stream
             }
             return nil
+        }
+    }
+    
+    private func updateAccessPattern(for streamId: String) {
+        let now = Date()
+        if var pattern = accessPatterns[streamId] {
+            pattern.accessFrequency += 1
+            pattern.lastAccessed = now
+            pattern.accessTimes.append(now)
+            
+            // Keep only recent access times (last 100)
+            if pattern.accessTimes.count > 100 {
+                pattern.accessTimes.removeFirst(pattern.accessTimes.count - 100)
+            }
+            
+            accessPatterns[streamId] = pattern
+        } else {
+            accessPatterns[streamId] = AccessPattern(
+                streamId: streamId,
+                firstAccessed: now,
+                lastAccessed: now,
+                accessFrequency: 1,
+                accessTimes: [now]
+            )
+        }
+    }
+    
+    private func updateAccessPatterns() {
+        // Clean up old access patterns for streams no longer in cache
+        let cacheKeys = Set(streamCache.keys)
+        let patternKeys = Set(accessPatterns.keys)
+        let orphanedPatterns = patternKeys.subtracting(cacheKeys)
+        
+        for orphanedId in orphanedPatterns {
+            accessPatterns.removeValue(forKey: orphanedId)
         }
     }
     
@@ -458,8 +502,15 @@ public class StreamCacheManager: ObservableObject {
     private func performCacheCleanup() {
         cleanupQueue.async {
             self.cleanupExpiredItems()
-            self.cleanupOldItems()
+            
+            if self.smartCacheEnabled {
+                self.performIntelligentCleanup()
+            } else {
+                self.cleanupOldItems()
+            }
+            
             self.enforceMaxCacheSize()
+            self.updateAccessPatterns()
             self.calculateCacheSize()
         }
     }
@@ -496,9 +547,93 @@ public class StreamCacheManager: ObservableObject {
             let sortedStreams = streamCache.sorted { $0.value.lastAccessed < $1.value.lastAccessed }
             let itemsToRemove = sortedStreams.prefix(streamCache.count / 4) // Remove 25% of items
             
-            for (streamId, _) in itemsToRemove {
+            for (streamId, cachedStream) in itemsToRemove {
                 streamCache.removeValue(forKey: streamId)
                 removeStreamFromDisk(id: streamId)
+                updateCacheStats(operation: .streamRemoved, size: cachedStream.size)
+            }
+        }
+    }
+    
+    private func performIntelligentCleanup() {
+        let utilizationPercentage = Double(cacheSize) / Double(maxCacheSize)
+        
+        if utilizationPercentage > priorityCacheThreshold {
+            // Aggressive cleanup - remove bottom 30% by priority
+            performPriorityBasedCleanup(percentage: 0.3)
+        } else if utilizationPercentage > intelligentCacheThreshold {
+            // Smart cleanup - remove bottom 15% by priority
+            performPriorityBasedCleanup(percentage: 0.15)
+        }
+        
+        // Clean up streams that haven't been accessed in a long time
+        cleanupInactiveStreams()
+        
+        // Clean up duplicate or similar content
+        cleanupDuplicates()
+    }
+    
+    private func performPriorityBasedCleanup(percentage: Double) {
+        let itemsToRemove = Int(Double(streamCache.count) * percentage)
+        guard itemsToRemove > 0 else { return }
+        
+        // Get streams sorted by priority (lowest first)
+        let sortedByPriority = streamCache.sorted { (first, second) in
+            let firstPriority = priorityManager.calculatePriority(for: first.value, accessPattern: accessPatterns[first.key])
+            let secondPriority = priorityManager.calculatePriority(for: second.value, accessPattern: accessPatterns[second.key])
+            return firstPriority < secondPriority
+        }
+        
+        for (streamId, cachedStream) in sortedByPriority.prefix(itemsToRemove) {
+            streamCache.removeValue(forKey: streamId)
+            removeStreamFromDisk(id: streamId)
+            accessPatterns.removeValue(forKey: streamId)
+            updateCacheStats(operation: .streamRemoved, size: cachedStream.size)
+        }
+    }
+    
+    private func cleanupInactiveStreams() {
+        let inactiveThreshold = Date().addingTimeInterval(-48 * 3600) // 48 hours
+        
+        let inactiveStreams = streamCache.filter { $0.value.lastAccessed < inactiveThreshold }
+        
+        for (streamId, cachedStream) in inactiveStreams {
+            // Only remove if it's not a favorited or frequently accessed stream
+            let accessPattern = accessPatterns[streamId]
+            if accessPattern?.accessFrequency ?? 0 < 5 { // Less than 5 accesses
+                streamCache.removeValue(forKey: streamId)
+                removeStreamFromDisk(id: streamId)
+                accessPatterns.removeValue(forKey: streamId)
+                updateCacheStats(operation: .streamRemoved, size: cachedStream.size)
+            }
+        }
+    }
+    
+    private func cleanupDuplicates() {
+        var titleGroups: [String: [String]] = [:]
+        
+        // Group streams by similar titles
+        for (streamId, cachedStream) in streamCache {
+            let normalizedTitle = cachedStream.stream.title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            titleGroups[normalizedTitle, default: []].append(streamId)
+        }
+        
+        // Remove duplicates, keeping the most recently accessed
+        for (_, streamIds) in titleGroups where streamIds.count > 1 {
+            let sortedByAccess = streamIds.sorted { id1, id2 in
+                let access1 = streamCache[id1]?.lastAccessed ?? Date.distantPast
+                let access2 = streamCache[id2]?.lastAccessed ?? Date.distantPast
+                return access1 > access2
+            }
+            
+            // Remove all but the most recently accessed
+            for streamId in sortedByAccess.dropFirst() {
+                if let cachedStream = streamCache[streamId] {
+                    streamCache.removeValue(forKey: streamId)
+                    removeStreamFromDisk(id: streamId)
+                    accessPatterns.removeValue(forKey: streamId)
+                    updateCacheStats(operation: .streamRemoved, size: cachedStream.size)
+                }
             }
         }
     }
@@ -588,6 +723,7 @@ public class StreamCacheManager: ObservableObject {
             self.streamCache.removeAll()
             self.thumbnailCache.removeAll()
             self.metadataCache.removeAll()
+            self.accessPatterns.removeAll()
             
             try? self.fileManager.removeItem(at: self.cacheDirectory)
             self.createCacheDirectories()
@@ -595,6 +731,22 @@ public class StreamCacheManager: ObservableObject {
             self.cacheStats = CacheStatistics()
             self.calculateCacheSize()
         }
+    }
+    
+    public func enableSmartCaching(_ enabled: Bool) {
+        smartCacheEnabled = enabled
+    }
+    
+    public func getAccessPatterns() -> [String: AccessPattern] {
+        return accessPatterns
+    }
+    
+    public func getCacheUtilization() -> Double {
+        return Double(cacheSize) / Double(maxCacheSize)
+    }
+    
+    public func predictCacheNeed(for stream: Stream) -> CachePriority {
+        return priorityManager.predictPriority(for: stream, accessPatterns: accessPatterns)
     }
     
     public func clearExpiredCache() async {
@@ -612,7 +764,10 @@ public class StreamCacheManager: ObservableObject {
             thumbnailCount: thumbnailCache.count,
             metadataCount: metadataCache.count,
             status: cacheStatus,
-            isOfflineMode: isOfflineMode
+            isOfflineMode: isOfflineMode,
+            smartCachingEnabled: smartCacheEnabled,
+            accessPatternCount: accessPatterns.count,
+            utilizationPercentage: getCacheUtilization()
         )
     }
 }
@@ -736,11 +891,9 @@ public struct CacheInfo {
     public let metadataCount: Int
     public let status: CacheStatus
     public let isOfflineMode: Bool
-    
-    public var utilizationPercentage: Double {
-        guard maxSize > 0 else { return 0 }
-        return Double(totalSize) / Double(maxSize) * 100
-    }
+    public let smartCachingEnabled: Bool
+    public let accessPatternCount: Int
+    public let utilizationPercentage: Double
     
     public var formattedSize: String {
         return ByteCountFormatter.string(fromByteCount: totalSize, countStyle: .file)
@@ -748,5 +901,204 @@ public struct CacheInfo {
     
     public var formattedMaxSize: String {
         return ByteCountFormatter.string(fromByteCount: maxSize, countStyle: .file)
+    }
+    
+    public var healthScore: Double {
+        // Calculate cache health based on utilization and access patterns
+        let utilizationScore = 1.0 - min(utilizationPercentage / 100.0, 1.0)
+        let accessScore = accessPatternCount > 0 ? min(Double(accessPatternCount) / Double(streamCount), 1.0) : 0.0
+        return (utilizationScore + accessScore) / 2.0
+    }
+}
+
+// MARK: - Access Pattern
+public struct AccessPattern {
+    public let streamId: String
+    public let firstAccessed: Date
+    public var lastAccessed: Date
+    public var accessFrequency: Int
+    public var accessTimes: [Date]
+    
+    public var averageAccessInterval: TimeInterval {
+        guard accessTimes.count > 1 else { return 0 }
+        
+        let intervals = accessTimes.indices.dropFirst().map { index in
+            accessTimes[index].timeIntervalSince(accessTimes[index - 1])
+        }
+        
+        return intervals.reduce(0, +) / Double(intervals.count)
+    }
+    
+    public var isFrequentlyAccessed: Bool {
+        return accessFrequency > 10 && averageAccessInterval < 3600 // More than 10 times, average less than 1 hour apart
+    }
+    
+    public var recency: TimeInterval {
+        return Date().timeIntervalSince(lastAccessed)
+    }
+}
+
+// MARK: - Cache Priority Manager
+public class CachePriorityManager {
+    
+    public func calculatePriority(for cachedStream: CachedStream, accessPattern: AccessPattern?) -> Double {
+        var priority: Double = 0.0
+        
+        // Base priority from stream properties
+        priority += streamBasePriority(cachedStream.stream)
+        
+        // Access pattern priority
+        if let pattern = accessPattern {
+            priority += accessPatternPriority(pattern)
+        }
+        
+        // Recency priority
+        priority += recencyPriority(cachedStream.lastAccessed)
+        
+        // Size penalty (larger streams get lower priority)
+        priority -= sizePenalty(cachedStream.size)
+        
+        return max(0, priority)
+    }
+    
+    public func predictPriority(for stream: Stream, accessPatterns: [String: AccessPattern]) -> CachePriority {
+        let basePriority = streamBasePriority(stream)
+        
+        // Check if this stream has been accessed before
+        if let existingPattern = accessPatterns[stream.id] {
+            let accessPriority = accessPatternPriority(existingPattern)
+            let totalPriority = basePriority + accessPriority
+            
+            if totalPriority > 8.0 {
+                return .critical
+            } else if totalPriority > 6.0 {
+                return .high
+            } else if totalPriority > 4.0 {
+                return .medium
+            } else {
+                return .low
+            }
+        }
+        
+        // For new streams, base prediction on stream properties
+        if basePriority > 6.0 {
+            return .high
+        } else if basePriority > 4.0 {
+            return .medium
+        } else {
+            return .low
+        }
+    }
+    
+    private func streamBasePriority(_ stream: Stream) -> Double {
+        var priority: Double = 0.0
+        
+        // Live streams get higher priority
+        if stream.isLive {
+            priority += 3.0
+        }
+        
+        // Popular streams get higher priority
+        let viewerBonus = min(Double(stream.viewerCount) / 10000.0, 2.0) // Cap at 2.0 for 10k+ viewers
+        priority += viewerBonus
+        
+        // Recent streams get higher priority
+        if let startedAt = stream.startedAt {
+            let hoursSinceStart = Date().timeIntervalSince(startedAt) / 3600
+            if hoursSinceStart < 1 {
+                priority += 2.0
+            } else if hoursSinceStart < 6 {
+                priority += 1.0
+            }
+        }
+        
+        // Favorited streams get higher priority
+        if stream.isFavorited {
+            priority += 3.0
+        }
+        
+        // Platform-based priority
+        switch stream.platform {
+        case .twitch:
+            priority += 1.5
+        case .youtube:
+            priority += 1.2
+        case .rumble:
+            priority += 1.0
+        default:
+            priority += 0.5
+        }
+        
+        return priority
+    }
+    
+    private func accessPatternPriority(_ pattern: AccessPattern) -> Double {
+        var priority: Double = 0.0
+        
+        // Frequency bonus
+        priority += min(Double(pattern.accessFrequency) * 0.5, 5.0) // Cap at 5.0
+        
+        // Recency bonus
+        let hoursSinceAccess = pattern.recency / 3600
+        if hoursSinceAccess < 1 {
+            priority += 3.0
+        } else if hoursSinceAccess < 6 {
+            priority += 2.0
+        } else if hoursSinceAccess < 24 {
+            priority += 1.0
+        }
+        
+        // Regular access pattern bonus
+        if pattern.isFrequentlyAccessed {
+            priority += 2.0
+        }
+        
+        return priority
+    }
+    
+    private func recencyPriority(_ lastAccessed: Date) -> Double {
+        let hoursSinceAccess = Date().timeIntervalSince(lastAccessed) / 3600
+        
+        if hoursSinceAccess < 1 {
+            return 2.0
+        } else if hoursSinceAccess < 6 {
+            return 1.5
+        } else if hoursSinceAccess < 24 {
+            return 1.0
+        } else {
+            return 0.0
+        }
+    }
+    
+    private func sizePenalty(_ size: Int64) -> Double {
+        // Larger items get slightly lower priority
+        let sizeInMB = Double(size) / (1024 * 1024)
+        return min(sizeInMB / 100.0, 1.0) // Small penalty for large items
+    }
+}
+
+// MARK: - Cache Priority
+public enum CachePriority: Int, CaseIterable {
+    case low = 1
+    case medium = 2
+    case high = 3
+    case critical = 4
+    
+    public var displayName: String {
+        switch self {
+        case .low: return "Low"
+        case .medium: return "Medium"
+        case .high: return "High"
+        case .critical: return "Critical"
+        }
+    }
+    
+    public var color: Color {
+        switch self {
+        case .low: return .gray
+        case .medium: return .blue
+        case .high: return .orange
+        case .critical: return .red
+        }
     }
 }

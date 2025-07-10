@@ -334,6 +334,78 @@ public class RumbleService: ObservableObject {
         return false
     }
     
+    // MARK: - Discovery Methods
+    
+    /// Get featured streams (mock implementation since no public API)
+    public func getFeaturedStreams(limit: Int = 15) async throws -> [DiscoveredStream] {
+        return generateMockRumbleStreams(count: limit, type: "featured")
+    }
+    
+    /// Get trending streams (mock implementation since no public API)
+    public func getTrendingStreams(limit: Int = 20) async throws -> [DiscoveredStream] {
+        return generateMockRumbleStreams(count: limit, type: "trending")
+    }
+    
+    /// Search for streams (mock implementation since no public API)
+    public func searchStreams(query: String, filters: RumbleSearchFilters, limit: Int = 25) async throws -> [DiscoveredStream] {
+        return generateMockRumbleStreams(count: limit, type: "search", query: query)
+    }
+    
+    /// Get streams by category (mock implementation since no public API)
+    public func getStreamsByCategory(category: String, limit: Int = 10) async throws -> [DiscoveredStream] {
+        return generateMockRumbleStreams(count: limit, type: "category", category: category)
+    }
+    
+    /// Get categories (mock implementation since no public API)
+    public func getCategories() async throws -> [StreamCategory] {
+        return [
+            StreamCategory(id: "news", name: "News", platform: .rumble, viewerCount: 25000, streamCount: 150),
+            StreamCategory(id: "politics", name: "Politics", platform: .rumble, viewerCount: 20000, streamCount: 100),
+            StreamCategory(id: "education", name: "Education", platform: .rumble, viewerCount: 15000, streamCount: 80),
+            StreamCategory(id: "entertainment", name: "Entertainment", platform: .rumble, viewerCount: 18000, streamCount: 120),
+            StreamCategory(id: "technology", name: "Technology", platform: .rumble, viewerCount: 12000, streamCount: 90),
+            StreamCategory(id: "finance", name: "Finance", platform: .rumble, viewerCount: 10000, streamCount: 70),
+            StreamCategory(id: "health", name: "Health", platform: .rumble, viewerCount: 8000, streamCount: 60),
+            StreamCategory(id: "lifestyle", name: "Lifestyle", platform: .rumble, viewerCount: 7000, streamCount: 50)
+        ]
+    }
+    
+    /// Generate mock Rumble streams since no public API is available
+    private func generateMockRumbleStreams(count: Int, type: String, query: String? = nil, category: String? = nil) -> [DiscoveredStream] {
+        let categories = ["News", "Politics", "Education", "Entertainment", "Technology", "Finance", "Health", "Lifestyle"]
+        let newsChannels = ["NewsMax", "RSBN", "InfoWars", "TimCast", "Stew Peters", "Red Elephant", "Bannons War Room", "X22 Report"]
+        let contentTypes = ["LIVE:", "BREAKING:", "EXCLUSIVE:", "ANALYSIS:", "REPORT:", "UPDATE:"]
+        
+        return (0..<count).map { index in
+            let channelName = newsChannels.randomElement() ?? "RumbleChannel\(index + 1)"
+            let contentType = contentTypes.randomElement() ?? ""
+            let selectedCategory = category ?? categories.randomElement() ?? "News"
+            
+            var title = "\(contentType) \(selectedCategory) Stream \(index + 1)"
+            if let query = query {
+                title = "\(contentType) \(query) - \(selectedCategory) Discussion"
+            }
+            
+            let videoId = "rumble_\(type)_\(index)_\(Int.random(in: 1000...9999))"
+            let viewerCount = Int.random(in: 50...5000)
+            let isLive = type == "trending" ? Bool.random() : (type == "featured" ? true : Bool.random())
+            
+            return DiscoveredStream(
+                id: videoId,
+                title: title,
+                channelName: channelName,
+                platform: .rumble,
+                viewerCount: viewerCount,
+                isLive: isLive,
+                thumbnailURL: "https://picsum.photos/320/180?random=\(index + 100)",
+                streamURL: "https://rumble.com/v\(videoId)",
+                category: selectedCategory,
+                language: "en",
+                startedAt: Date().addingTimeInterval(-Double.random(in: 0...7200)) // Started within last 2 hours
+            )
+        }
+    }
+    
     // MARK: - Utility Methods
     
     /// Creates a properly formatted Rumble URL from identifier
@@ -382,6 +454,52 @@ public class RumbleService: ObservableObject {
         }
         
         return .networkError(error)
+    }
+}
+
+// MARK: - Search Filters
+
+/// Search filters for Rumble content
+public struct RumbleSearchFilters {
+    public var liveOnly: Bool
+    public var categories: [String]?
+    public var dateRange: DateRange?
+    public var duration: DurationFilter?
+    public var sortBy: SortOrder
+    
+    public init(
+        liveOnly: Bool = false,
+        categories: [String]? = nil,
+        dateRange: DateRange? = nil,
+        duration: DurationFilter? = nil,
+        sortBy: SortOrder = .relevance
+    ) {
+        self.liveOnly = liveOnly
+        self.categories = categories
+        self.dateRange = dateRange
+        self.duration = duration
+        self.sortBy = sortBy
+    }
+    
+    public enum DateRange {
+        case today
+        case thisWeek
+        case thisMonth
+        case thisYear
+        case custom(from: Date, to: Date)
+    }
+    
+    public enum DurationFilter {
+        case short      // < 4 minutes
+        case medium     // 4-20 minutes
+        case long       // > 20 minutes
+    }
+    
+    public enum SortOrder {
+        case relevance
+        case date
+        case viewCount
+        case rating
     }
 }
 

@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import Network
 
 // MARK: - Stream Validation Service
 @MainActor
@@ -707,5 +708,577 @@ private class KickAPIClient {
     func getChannelAvailability(channelName: String) async throws -> StreamAvailability {
         // Placeholder implementation
         return StreamAvailability(isLive: false, viewerCount: 0)
+    }
+}
+
+// MARK: - Enhanced Validation Methods for Stream Model
+
+extension StreamValidationService {
+    
+    /// Enhanced validation method that works with the Stream model
+    public func validateStream(_ stream: Stream) async -> StreamValidationResult {
+        let startTime = Date()
+        totalValidations += 1
+        
+        // Check cache first
+        if cacheEnabled,
+           let cachedResult = getCachedResult(for: stream.id),
+           !cachedResult.isExpired {
+            cacheHits += 1
+            return cachedResult.result
+        }
+        
+        let request = ValidationRequest(
+            streamId: stream.id,
+            platform: stream.platform,
+            url: stream.url,
+            timestamp: Date()
+        )
+        
+        validationQueue.append(request)
+        isValidating = true
+        
+        do {
+            let result = try await performStreamValidation(stream)
+            
+            // Cache the result
+            if cacheEnabled {
+                cacheStreamValidationResult(result, for: stream.id)
+            }
+            
+            // Add to recent validations
+            addToRecentValidations(result)
+            
+            // Update statistics
+            if result.isValid {
+                successfulValidations += 1
+            } else {
+                failedValidations += 1
+            }
+            
+            validationTime = Date().timeIntervalSince(startTime)
+            
+            // Remove from queue
+            validationQueue.removeAll { $0.id == request.id }
+            
+            if validationQueue.isEmpty {
+                isValidating = false
+            }
+            
+            return result
+            
+        } catch {
+            failedValidations += 1
+            validationTime = Date().timeIntervalSince(startTime)
+            
+            // Remove from queue
+            validationQueue.removeAll { $0.id == request.id }
+            
+            if validationQueue.isEmpty {
+                isValidating = false
+            }
+            
+            return StreamValidationResult(
+                streamId: stream.id,
+                isValid: false,
+                errors: [error.localizedDescription],
+                warnings: [],
+                platform: stream.platform,
+                timestamp: Date(),
+                validationDetails: ValidationDetails(error: error)
+            )
+        }
+    }
+    
+    /// Quick validation without network calls
+    public func quickValidateStream(_ stream: Stream) -> QuickValidationResult {
+        var errors: [String] = []
+        var warnings: [String] = []
+        
+        // URL validation
+        if stream.url.isEmpty {
+            errors.append("Stream URL is empty")
+        } else if !isValidURL(stream.url) {
+            errors.append("Invalid URL format")
+        }
+        
+        // Platform validation
+        if !stream.platform.isValidURL(stream.url) {
+            errors.append("URL doesn't match platform \(stream.platform.displayName)")
+        }
+        
+        // Title validation
+        if stream.title.isEmpty {
+            warnings.append("Stream title is empty")
+        }
+        
+        // Platform-specific quick validation
+        let platformResult = getValidator(for: stream.platform).quickValidate(stream)
+        errors.append(contentsOf: platformResult.errors)
+        warnings.append(contentsOf: platformResult.warnings)
+        
+        return QuickValidationResult(
+            isValid: errors.isEmpty,
+            errors: errors,
+            warnings: warnings,
+            canProceed: errors.count <= 1,
+            confidence: calculateConfidence(errors: errors, warnings: warnings)
+        )
+    }
+    
+    /// Validate multiple streams concurrently
+    public func validateMultipleStreams(_ streams: [Stream]) async -> [StreamValidationResult] {
+        return await withTaskGroup(of: StreamValidationResult.self) { group in
+            var results: [StreamValidationResult] = []
+            
+            for stream in streams {
+                group.addTask {
+                    await self.validateStream(stream)
+                }
+            }
+            
+            for await result in group {
+                results.append(result)
+            }
+            
+            return results.sorted { $0.timestamp < $1.timestamp }
+        }
+    }
+    
+    // MARK: - Private Enhanced Methods
+    
+    private func performStreamValidation(_ stream: Stream) async throws -> StreamValidationResult {
+        var errors: [String] = []
+        var warnings: [String] = []
+        var details = ValidationDetails()
+        
+        // Basic URL validation
+        do {
+            try validateBasicURL(stream.url)
+        } catch let error as ValidationError {
+            errors.append(error.localizedDescription)
+        }
+        
+        // Platform-specific validation
+        let validator = getValidator(for: stream.platform)
+        let platformResult = await validator.validateStream(stream)
+        
+        return platformResult
+    }
+    
+    private func getValidator(for platform: Platform) -> StreamValidator {
+        switch platform {
+        case .twitch:
+            return TwitchStreamValidator()
+        case .youtube:
+            return YouTubeStreamValidator()
+        case .kick:
+            return KickStreamValidator()
+        case .rumble:
+            return RumbleStreamValidator()
+        default:
+            return GenericStreamValidator()
+        }
+    }
+    
+    private func getCachedResult(for streamId: String) -> CachedValidationResult? {
+        return validationCache[streamId]
+    }
+    
+    private func cacheStreamValidationResult(_ result: StreamValidationResult, for streamId: String) {
+        let cachedResult = CachedValidationResult(
+            result: result,
+            cachedAt: Date(),
+            expiresAt: Date().addingTimeInterval(cacheExpiration)
+        )
+        validationCache[streamId] = cachedResult
+    }
+    
+    private func addToRecentValidations(_ result: StreamValidationResult) {
+        recentValidations.insert(result, at: 0)
+        
+        // Keep only recent 20 validations
+        if recentValidations.count > 20 {
+            recentValidations = Array(recentValidations.prefix(20))
+        }
+    }
+    
+    private func isValidURL(_ urlString: String) -> Bool {
+        guard let url = URL(string: urlString) else { return false }
+        return url.scheme != nil && url.host != nil
+    }
+    
+    private func calculateConfidence(errors: [String], warnings: [String]) -> Double {
+        let errorWeight = 0.5
+        let warningWeight = 0.1
+        let maxPenalty = 1.0
+        
+        let penalty = Double(errors.count) * errorWeight + Double(warnings.count) * warningWeight
+        return max(0.0, 1.0 - min(penalty, maxPenalty))
+    }
+    
+    private func cleanupCache() async {
+        let now = Date()
+        validationCache = validationCache.filter { _, cachedResult in
+            now < cachedResult.expiresAt
+        }
+        
+        // Keep recent validations list manageable
+        if recentValidations.count > 50 {
+            recentValidations = Array(recentValidations.suffix(50))
+        }
+    }
+    
+    // MARK: - Statistics and Analytics
+    
+    public var validationSuccessRate: Double {
+        guard totalValidations > 0 else { return 0.0 }
+        return Double(successfulValidations) / Double(totalValidations)
+    }
+    
+    public var cacheHitRate: Double {
+        guard totalValidations > 0 else { return 0.0 }
+        return Double(cacheHits) / Double(totalValidations)
+    }
+    
+    public var averageValidationTime: TimeInterval {
+        guard totalValidations > 0 else { return 0.0 }
+        return validationTime / Double(totalValidations)
+    }
+    
+    public func getValidationHistory(for streamId: String) -> [StreamValidationResult] {
+        return recentValidations.filter { $0.streamId == streamId }
+    }
+    
+    public func getValidationStatistics() -> ValidationStatistics {
+        return ValidationStatistics(
+            totalValidations: totalValidations,
+            successfulValidations: successfulValidations,
+            failedValidations: failedValidations,
+            successRate: validationSuccessRate,
+            cacheHits: cacheHits,
+            cacheHitRate: cacheHitRate,
+            averageValidationTime: averageValidationTime,
+            queueLength: validationQueue.count,
+            cacheSize: validationCache.count
+        )
+    }
+}
+
+// MARK: - Enhanced Supporting Types
+
+public struct StreamValidationResult {
+    public let streamId: String
+    public let isValid: Bool
+    public let errors: [String]
+    public let warnings: [String]
+    public let platform: Platform
+    public let timestamp: Date
+    public let validationDetails: ValidationDetails
+}
+
+public struct URLValidationResult {
+    public let isValid: Bool
+    public let errors: [String]
+    public let warnings: [String]
+    public let platform: Platform
+    public let extractedData: [String: String]
+}
+
+public struct QuickValidationResult {
+    public let isValid: Bool
+    public let errors: [String]
+    public let warnings: [String]
+    public let canProceed: Bool
+    public let confidence: Double
+}
+
+public struct ValidationDetails {
+    public var extractedData: [String: String] = [:]
+    public var platformData: Any?
+    public var liveStatus: Bool?
+    public var viewerCount: Int?
+    public var networkError: Error?
+    public var responseTime: TimeInterval?
+    
+    public init(error: Error? = nil) {
+        self.networkError = error
+    }
+}
+
+public struct ValidationRequest: Identifiable {
+    public let id = UUID()
+    public let streamId: String
+    public let platform: Platform
+    public let url: String
+    public let timestamp: Date
+}
+
+public struct CachedValidationResult {
+    public let result: StreamValidationResult
+    public let cachedAt: Date
+    public let expiresAt: Date
+    
+    public var isExpired: Bool {
+        Date() > expiresAt
+    }
+}
+
+public struct ValidationStatistics {
+    public let totalValidations: Int
+    public let successfulValidations: Int
+    public let failedValidations: Int
+    public let successRate: Double
+    public let cacheHits: Int
+    public let cacheHitRate: Double
+    public let averageValidationTime: TimeInterval
+    public let queueLength: Int
+    public let cacheSize: Int
+}
+
+public enum NetworkReachability {
+    case unknown
+    case connected
+    case disconnected
+}
+
+// MARK: - Stream Validator Protocol
+public protocol StreamValidator {
+    func validateStream(_ stream: Stream) async -> StreamValidationResult
+    func validateURL(_ url: String) async -> URLValidationResult
+    func quickValidate(_ stream: Stream) -> QuickValidationResult
+}
+
+// MARK: - Platform-Specific Validators
+
+public class TwitchStreamValidator: StreamValidator {
+    public func validateStream(_ stream: Stream) async -> StreamValidationResult {
+        var errors: [String] = []
+        var warnings: [String] = []
+        var details = ValidationDetails()
+        
+        // URL format validation
+        if !stream.url.contains("twitch.tv") {
+            errors.append("Invalid Twitch URL format")
+        }
+        
+        // Extract channel name
+        guard let channelName = extractTwitchChannelName(from: stream.url) else {
+            errors.append("Cannot extract channel name from URL")
+            return createResult(stream: stream, errors: errors, warnings: warnings, details: details)
+        }
+        
+        details.extractedData["channelName"] = channelName
+        
+        return createResult(stream: stream, errors: errors, warnings: warnings, details: details)
+    }
+    
+    public func validateURL(_ url: String) async -> URLValidationResult {
+        let isValid = url.contains("twitch.tv") && extractTwitchChannelName(from: url) != nil
+        let errors = isValid ? [] : ["Invalid Twitch URL format"]
+        
+        return URLValidationResult(
+            isValid: isValid,
+            errors: errors,
+            warnings: [],
+            platform: .twitch,
+            extractedData: extractTwitchChannelName(from: url).map { ["channelName": $0] } ?? [:]
+        )
+    }
+    
+    public func quickValidate(_ stream: Stream) -> QuickValidationResult {
+        var errors: [String] = []
+        var warnings: [String] = []
+        
+        if !stream.url.contains("twitch.tv") {
+            errors.append("Not a Twitch URL")
+        }
+        
+        if extractTwitchChannelName(from: stream.url) == nil {
+            errors.append("Invalid Twitch channel URL")
+        }
+        
+        return QuickValidationResult(
+            isValid: errors.isEmpty,
+            errors: errors,
+            warnings: warnings,
+            canProceed: errors.count <= 1,
+            confidence: errors.isEmpty ? 0.9 : 0.3
+        )
+    }
+    
+    private func extractTwitchChannelName(from url: String) -> String? {
+        let patterns = [
+            #"twitch\.tv/([a-zA-Z0-9_]+)"#,
+            #"www\.twitch\.tv/([a-zA-Z0-9_]+)"#,
+            #"player\.twitch\.tv/\?channel=([a-zA-Z0-9_]+)"#
+        ]
+        
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+               let match = regex.firstMatch(in: url, options: [], range: NSRange(location: 0, length: url.count)),
+               let range = Range(match.range(at: 1), in: url) {
+                return String(url[range])
+            }
+        }
+        
+        return nil
+    }
+    
+    private func createResult(stream: Stream, errors: [String], warnings: [String], details: ValidationDetails) -> StreamValidationResult {
+        return StreamValidationResult(
+            streamId: stream.id,
+            isValid: errors.isEmpty,
+            errors: errors,
+            warnings: warnings,
+            platform: stream.platform,
+            timestamp: Date(),
+            validationDetails: details
+        )
+    }
+}
+
+public class YouTubeStreamValidator: StreamValidator {
+    public func validateStream(_ stream: Stream) async -> StreamValidationResult {
+        return StreamValidationResult(
+            streamId: stream.id,
+            isValid: stream.url.contains("youtube.com") || stream.url.contains("youtu.be"),
+            errors: stream.url.contains("youtube.com") || stream.url.contains("youtu.be") ? [] : ["Invalid YouTube URL"],
+            warnings: [],
+            platform: stream.platform,
+            timestamp: Date(),
+            validationDetails: ValidationDetails()
+        )
+    }
+    
+    public func validateURL(_ url: String) async -> URLValidationResult {
+        let isValid = url.contains("youtube.com") || url.contains("youtu.be")
+        return URLValidationResult(
+            isValid: isValid,
+            errors: isValid ? [] : ["Invalid YouTube URL"],
+            warnings: [],
+            platform: .youtube,
+            extractedData: [:]
+        )
+    }
+    
+    public func quickValidate(_ stream: Stream) -> QuickValidationResult {
+        let isValid = stream.url.contains("youtube.com") || stream.url.contains("youtu.be")
+        return QuickValidationResult(
+            isValid: isValid,
+            errors: isValid ? [] : ["Not a YouTube URL"],
+            warnings: [],
+            canProceed: isValid,
+            confidence: isValid ? 0.8 : 0.2
+        )
+    }
+}
+
+public class KickStreamValidator: StreamValidator {
+    public func validateStream(_ stream: Stream) async -> StreamValidationResult {
+        return StreamValidationResult(
+            streamId: stream.id,
+            isValid: stream.url.contains("kick.com"),
+            errors: stream.url.contains("kick.com") ? [] : ["Invalid Kick URL"],
+            warnings: [],
+            platform: stream.platform,
+            timestamp: Date(),
+            validationDetails: ValidationDetails()
+        )
+    }
+    
+    public func validateURL(_ url: String) async -> URLValidationResult {
+        let isValid = url.contains("kick.com")
+        return URLValidationResult(
+            isValid: isValid,
+            errors: isValid ? [] : ["Invalid Kick URL"],
+            warnings: [],
+            platform: .kick,
+            extractedData: [:]
+        )
+    }
+    
+    public func quickValidate(_ stream: Stream) -> QuickValidationResult {
+        let isValid = stream.url.contains("kick.com")
+        return QuickValidationResult(
+            isValid: isValid,
+            errors: isValid ? [] : ["Not a Kick URL"],
+            warnings: [],
+            canProceed: isValid,
+            confidence: isValid ? 0.8 : 0.2
+        )
+    }
+}
+
+public class RumbleStreamValidator: StreamValidator {
+    public func validateStream(_ stream: Stream) async -> StreamValidationResult {
+        return StreamValidationResult(
+            streamId: stream.id,
+            isValid: stream.url.contains("rumble.com"),
+            errors: stream.url.contains("rumble.com") ? [] : ["Invalid Rumble URL"],
+            warnings: [],
+            platform: stream.platform,
+            timestamp: Date(),
+            validationDetails: ValidationDetails()
+        )
+    }
+    
+    public func validateURL(_ url: String) async -> URLValidationResult {
+        let isValid = url.contains("rumble.com")
+        return URLValidationResult(
+            isValid: isValid,
+            errors: isValid ? [] : ["Invalid Rumble URL"],
+            warnings: [],
+            platform: .rumble,
+            extractedData: [:]
+        )
+    }
+    
+    public func quickValidate(_ stream: Stream) -> QuickValidationResult {
+        let isValid = stream.url.contains("rumble.com")
+        return QuickValidationResult(
+            isValid: isValid,
+            errors: isValid ? [] : ["Not a Rumble URL"],
+            warnings: [],
+            canProceed: isValid,
+            confidence: isValid ? 0.8 : 0.2
+        )
+    }
+}
+
+public class GenericStreamValidator: StreamValidator {
+    public func validateStream(_ stream: Stream) async -> StreamValidationResult {
+        let isValidURL = URL(string: stream.url) != nil
+        return StreamValidationResult(
+            streamId: stream.id,
+            isValid: isValidURL,
+            errors: isValidURL ? [] : ["Invalid URL format"],
+            warnings: ["Using generic validator - platform-specific validation unavailable"],
+            platform: stream.platform,
+            timestamp: Date(),
+            validationDetails: ValidationDetails()
+        )
+    }
+    
+    public func validateURL(_ url: String) async -> URLValidationResult {
+        let isValid = URL(string: url) != nil
+        return URLValidationResult(
+            isValid: isValid,
+            errors: isValid ? [] : ["Invalid URL format"],
+            warnings: ["Generic validation only"],
+            platform: .other,
+            extractedData: [:]
+        )
+    }
+    
+    public func quickValidate(_ stream: Stream) -> QuickValidationResult {
+        let isValid = URL(string: stream.url) != nil
+        return QuickValidationResult(
+            isValid: isValid,
+            errors: isValid ? [] : ["Invalid URL"],
+            warnings: ["Limited validation"],
+            canProceed: isValid,
+            confidence: isValid ? 0.5 : 0.1
+        )
     }
 }

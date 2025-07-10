@@ -61,7 +61,9 @@ struct ModernMainView: View {
             }
         }
         .onAppear {
-            streamStore.loadStreams()
+            Task {
+                await streamStore.loadStreams()
+            }
         }
     }
 }
@@ -71,6 +73,7 @@ struct ModernStreamPlayerSheet: View {
     let stream: TwitchStream
     @Binding var isPresented: Bool
     @State private var showingSafari = false
+    @State private var addedToMultiStream = false
     
     var body: some View {
         NavigationView {
@@ -157,6 +160,22 @@ struct ModernStreamPlayerSheet: View {
                     }
                     
                     Button(action: {
+                        addToMultiStream()
+                    }) {
+                        HStack {
+                            Image(systemName: addedToMultiStream ? "checkmark.circle.fill" : "plus.rectangle.on.rectangle")
+                            Text(addedToMultiStream ? "Added to Multi-Stream" : "Add to Multi-Stream")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(addedToMultiStream ? Color.green : Color.orange)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(addedToMultiStream)
+                    
+                    Button(action: {
                         openInTwitchApp()
                     }) {
                         HStack {
@@ -187,6 +206,25 @@ struct ModernStreamPlayerSheet: View {
         }
         .sheet(isPresented: $showingSafari) {
             SafariView(url: URL(string: "https://m.twitch.tv/\(stream.userLogin)")!)
+        }
+    }
+    
+    private func addToMultiStream() {
+        // For now, we'll show a visual confirmation
+        // In a real app, this would notify the multi-stream manager
+        withAnimation(.easeInOut(duration: 0.3)) {
+            addedToMultiStream = true
+        }
+        
+        // Post notification to add stream to multi-stream view
+        NotificationCenter.default.post(
+            name: Notification.Name("AddStreamToMultiView"),
+            object: stream
+        )
+        
+        // Auto-dismiss after confirmation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            isPresented = false
         }
     }
     
@@ -259,8 +297,28 @@ struct DiscoverTab: View {
                     .cornerRadius(12)
                     .padding(.horizontal)
                     
+                    // Error Message
+                    if let errorMessage = streamStore.errorMessage {
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 40))
+                                .foregroundColor(.orange)
+                            
+                            Text(errorMessage)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                            
+                            Button("Try Again") {
+                                streamStore.clearError()
+                                streamStore.refreshStreams()
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        .padding(.top, 50)
+                    }
                     // Streams Grid
-                    if streamStore.isLoading {
+                    else if streamStore.isLoading {
                         ProgressView("Loading streams...")
                             .padding(.top, 50)
                     } else if filteredStreams.isEmpty {
@@ -291,7 +349,13 @@ struct DiscoverTab: View {
             }
             .navigationTitle("Discover")
             .refreshable {
-                streamStore.loadStreams()
+                await streamStore.loadStreams()
+            }
+            .onAppear {
+                streamStore.startAutoRefresh()
+            }
+            .onDisappear {
+                streamStore.stopAutoRefresh()
             }
         }
     }
@@ -326,7 +390,7 @@ struct BrowseTab: View {
             }
             .navigationTitle("Browse")
             .refreshable {
-                streamStore.loadStreams()
+                await streamStore.loadStreams()
             }
         }
     }
@@ -481,9 +545,15 @@ struct ModernStreamCard: View {
 }
 
 // MARK: - Stream Store Manager
+@MainActor
 class StreamStoreManager: ObservableObject {
     @Published var streams: [TwitchStream] = []
     @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    private var lastRefreshTime: Date?
+    private let refreshInterval: TimeInterval = 30 // 30 seconds minimum between refreshes
+    private var refreshTimer: Timer?
     
     var topStreams: [TwitchStream] {
         Array(streams.sorted { $0.viewerCount > $1.viewerCount }.prefix(6))
@@ -493,25 +563,141 @@ class StreamStoreManager: ObservableObject {
         Array(streams.filter { !$0.gameName.isEmpty && $0.gameName.lowercased() != "just chatting" }.prefix(6))
     }
     
-    func loadStreams() {
+    init() {
+        // Initialize with some test data while API loads
+        Task {
+            await loadStreams()
+        }
+    }
+    
+    func loadStreams() async {
         isLoading = true
+        errorMessage = nil
+        
+        do {
+            let twitchService = await RealTwitchAPIService.shared
+            await twitchService.validateAndRefreshTokens()
+            let (fetchedStreams, _) = await twitchService.getTopStreams(first: 50)
+            
+            streams = fetchedStreams
+            isLoading = false
+            lastRefreshTime = Date()
+            
+            if fetchedStreams.isEmpty {
+                errorMessage = "No streams available"
+            }
+        } catch {
+            isLoading = false
+            errorMessage = "Failed to load streams: \(error.localizedDescription)"
+            print("❌ Failed to load streams: \(error)")
+            
+            // Fallback to mock data for testing
+            loadMockStreams()
+        }
+    }
+    
+    private func loadMockStreams() {
+        streams = [
+            TwitchStream(
+                id: "mock1",
+                userId: "user1",
+                userLogin: "gamesdonequick",
+                userName: "Games Done Quick",
+                gameId: "33214",
+                gameName: "Variety",
+                type: "live",
+                title: "Awesome Games Done Quick 2025",
+                viewerCount: 45000,
+                startedAt: "2025-01-10T12:00:00Z",
+                language: "en",
+                thumbnailUrl: "https://static-cdn.jtvnw.net/previews-ttv/live_user_gamesdonequick-{width}x{height}.jpg",
+                tagIds: [],
+                isMature: false
+            ),
+            TwitchStream(
+                id: "mock2",
+                userId: "user2",
+                userLogin: "esl_csgo",
+                userName: "ESL CS:GO",
+                gameId: "32399",
+                gameName: "Counter-Strike 2",
+                type: "live",
+                title: "ESL Pro League",
+                viewerCount: 32000,
+                startedAt: "2025-01-10T11:30:00Z",
+                language: "en",
+                thumbnailUrl: "https://static-cdn.jtvnw.net/previews-ttv/live_user_esl_csgo-{width}x{height}.jpg",
+                tagIds: [],
+                isMature: false
+            ),
+            TwitchStream(
+                id: "mock3",
+                userId: "user3",
+                userLogin: "riotgames",
+                userName: "Riot Games",
+                gameId: "21779",
+                gameName: "League of Legends",
+                type: "live",
+                title: "LCS Championship",
+                viewerCount: 28000,
+                startedAt: "2025-01-10T10:45:00Z",
+                language: "en",
+                thumbnailUrl: "https://static-cdn.jtvnw.net/previews-ttv/live_user_riotgames-{width}x{height}.jpg",
+                tagIds: [],
+                isMature: false
+            ),
+            TwitchStream(
+                id: "mock4",
+                userId: "user4",
+                userLogin: "monstercat",
+                userName: "Monstercat",
+                gameId: "26936",
+                gameName: "Music",
+                type: "live",
+                title: "24/7 Music Stream",
+                viewerCount: 15000,
+                startedAt: "2025-01-10T10:00:00Z",
+                language: "en",
+                thumbnailUrl: "https://static-cdn.jtvnw.net/previews-ttv/live_user_monstercat-{width}x{height}.jpg",
+                tagIds: [],
+                isMature: false
+            )
+        ]
+    }
+    
+    func refreshStreams() {
+        // Prevent too frequent refreshes
+        if let lastRefresh = lastRefreshTime,
+           Date().timeIntervalSince(lastRefresh) < refreshInterval {
+            return
+        }
         
         Task {
-            do {
-                let twitchService = await RealTwitchAPIService.shared
-                await twitchService.validateAndRefreshTokens()
-                
-                let (fetchedStreams, _) = await twitchService.getTopStreams(first: 50)
-                
-                DispatchQueue.main.async {
-                    self.streams = fetchedStreams
-                    self.isLoading = false
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self.isLoading = false
-                }
+            await loadStreams()
+        }
+    }
+    
+    func clearError() {
+        errorMessage = nil
+    }
+    
+    func startAutoRefresh() {
+        refreshTimer?.invalidate()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+            Task { @MainActor in
+                self.refreshStreams()
             }
+        }
+    }
+    
+    func stopAutoRefresh() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+    
+    deinit {
+        Task { @MainActor in
+            stopAutoRefresh()
         }
     }
 }
@@ -525,6 +711,7 @@ struct MultiStreamView: View {
     @State private var selectedSlotIndex = 0
     @State private var showingFocusView = false
     @State private var focusedStreamIndex: Int?
+    @State private var showingAddStreamPopup = false
     
     enum GridLayout: String, CaseIterable {
         case single = "Single"
@@ -694,8 +881,15 @@ struct MultiStreamView: View {
             }
         }
         .onAppear {
-            streamStore.loadStreams()
+            Task {
+                await streamStore.loadStreams()
+            }
             updateLayout(currentLayout)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("AddStreamToMultiView"))) { notification in
+            if let stream = notification.object as? TwitchStream {
+                addStreamFromNotification(stream)
+            }
         }
     }
     
@@ -725,6 +919,17 @@ struct MultiStreamView: View {
     private func clearAllStreams() {
         selectedStreams = Array(repeating: nil, count: currentLayout.maxStreams)
     }
+    
+    private func addStreamFromNotification(_ stream: TwitchStream) {
+        // Find the first empty slot
+        if let emptyIndex = selectedStreams.firstIndex(where: { $0 == nil }) {
+            selectedStreams[emptyIndex] = stream
+            
+            // Show a brief confirmation
+            let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
+            hapticFeedback.impactOccurred()
+        }
+    }
 }
 
 // MARK: - Stream Slot
@@ -740,82 +945,26 @@ struct StreamSlot: View {
     
     var body: some View {
         ZStack {
-            Color.gray.opacity(0.2)
+            Color.black
             
             if let stream = stream {
-                // Video Player placeholder - will show stream thumbnail for now
-                AsyncImage(url: URL(string: stream.thumbnailUrl.replacingOccurrences(of: "{width}", with: "640").replacingOccurrences(of: "{height}", with: "360"))) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(16/9, contentMode: .fill)
-                } placeholder: {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .aspectRatio(16/9, contentMode: .fill)
-                        .overlay(
-                            VStack {
-                                Image(systemName: "play.fill")
-                                    .font(.title)
-                                    .foregroundColor(.white)
-                                Text("Stream Player")
-                                    .font(.caption)
-                                    .foregroundColor(.white)
-                            }
-                        )
-                }
+                // Simple Twitch stream player
+                SimpleCompactPlayer(stream: stream)
                 
-                // Overlay Controls
-                VStack {
-                    HStack {
-                        if !isCompact || showControls {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(stream.userName)
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .shadow(radius: 2)
-                                
-                                if !isCompact {
-                                    Text(stream.title)
-                                        .font(.caption2)
-                                        .foregroundColor(.white.opacity(0.8))
-                                        .lineLimit(1)
-                                        .shadow(radius: 2)
-                                }
-                            }
-                        }
-                        
-                        Spacer()
-                        
-                        if showControls {
+                // Remove button overlay for compact view
+                if showControls {
+                    VStack {
+                        HStack {
+                            Spacer()
                             Button(action: onRemove) {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundColor(.white)
                                     .background(Color.black.opacity(0.5))
                                     .clipShape(Circle())
                             }
+                            .padding(8)
                         }
-                    }
-                    .padding(8)
-                    
-                    Spacer()
-                    
-                    if !isCompact || showControls {
-                        HStack {
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(Color.red)
-                                    .frame(width: 4, height: 4)
-                                
-                                Text(stream.formattedViewerCount)
-                                    .font(.caption2)
-                                    .foregroundColor(.white)
-                                    .shadow(radius: 2)
-                            }
-                            
-                            Spacer()
-                        }
-                        .padding(8)
+                        Spacer()
                     }
                 }
             } else {
@@ -847,12 +996,13 @@ struct StreamSlot: View {
                     showControls.toggle()
                 }
                 
+                // Auto-hide controls after 3 seconds
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showControls = false
                     }
                 }
-            } else {
+            } else if stream == nil {
                 onTap()
             }
         }
@@ -928,7 +1078,9 @@ struct StreamPickerSheet: View {
     
     private var streamContentView: some View {
         Group {
-            if streamStore.isLoading {
+            if let errorMessage = streamStore.errorMessage {
+                errorStateView(message: errorMessage)
+            } else if streamStore.isLoading {
                 loadingView
             } else if filteredStreams.isEmpty {
                 emptyStateView
@@ -970,6 +1122,34 @@ struct StreamPickerSheet: View {
                     })
                 }
             }
+        }
+    }
+    
+    private func errorStateView(message: String) -> some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 50))
+                .foregroundColor(.orange)
+            
+            Text("Error Loading Streams")
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            Text(message)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            Button("Retry") {
+                streamStore.clearError()
+                streamStore.refreshStreams()
+            }
+            .buttonStyle(.borderedProminent)
+            
+            Spacer()
         }
     }
 }
@@ -1045,92 +1225,7 @@ struct FocusedStreamView: View {
     let onDismiss: () -> Void
     
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            
-            VStack {
-                AsyncImage(url: URL(string: stream.thumbnailUrl.replacingOccurrences(of: "{width}", with: "640").replacingOccurrences(of: "{height}", with: "360"))) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(16/9, contentMode: .fill)
-                } placeholder: {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .aspectRatio(16/9, contentMode: .fill)
-                        .overlay(
-                            VStack {
-                                Image(systemName: "play.fill")
-                                    .font(.system(size: 60))
-                                    .foregroundColor(.white)
-                                Text("Focused Stream Player")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                            }
-                        )
-                }
-                .aspectRatio(16/9, contentMode: .fit)
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(stream.title)
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .lineLimit(2)
-                    
-                    HStack {
-                        Text(stream.userName)
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.purple)
-                        
-                        Spacer()
-                        
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 6, height: 6)
-                            
-                            Text("LIVE • \(stream.formattedViewerCount)")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                        }
-                    }
-                    
-                    if !stream.gameName.isEmpty {
-                        Text("Playing: \(stream.gameName)")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                }
-                .padding()
-                .background(Color.black.opacity(0.8))
-            }
-            
-            VStack {
-                HStack {
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title)
-                            .foregroundColor(.white)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
-                    }
-                    .padding()
-                    
-                    Spacer()
-                }
-                
-                Spacer()
-            }
-        }
-        .gesture(
-            DragGesture()
-                .onEnded { value in
-                    if value.translation.height > 100 {
-                        onDismiss()
-                    }
-                }
-        )
+        FullscreenTwitchPlayerView(stream: stream, onDismiss: onDismiss)
     }
 }
 
@@ -1401,6 +1496,717 @@ struct DashboardCard: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(16)
+    }
+}
+
+// MARK: - Audio Manager
+@MainActor
+class MultiStreamAudioManager: ObservableObject {
+    static let shared = MultiStreamAudioManager()
+    
+    @Published var activeAudioStreamId: String? = nil
+    
+    private init() {}
+    
+    func setActiveAudioStream(_ streamId: String) {
+        if activeAudioStreamId == streamId {
+            // If tapping the same stream, mute it
+            activeAudioStreamId = nil
+        } else {
+            // Set new active stream
+            activeAudioStreamId = streamId
+        }
+        
+        // Post notification for all streams to update their audio state
+        NotificationCenter.default.post(
+            name: Notification.Name("AudioStreamChanged"),
+            object: activeAudioStreamId
+        )
+    }
+    
+    func isStreamAudioActive(_ streamId: String) -> Bool {
+        return activeAudioStreamId == streamId
+    }
+    
+    func muteAll() {
+        activeAudioStreamId = nil
+        NotificationCenter.default.post(
+            name: Notification.Name("AudioStreamChanged"),
+            object: nil
+        )
+    }
+}
+
+// MARK: - Auto-Play Twitch Player
+struct AutoPlayTwitchPlayer: UIViewRepresentable {
+    let stream: TwitchStream
+    let isAudioActive: Bool
+    let onLoadComplete: () -> Void
+    
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+        config.allowsPictureInPictureMediaPlayback = false
+        
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.backgroundColor = UIColor.black
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        
+        return webView
+    }
+    
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.parent = self
+        
+        let shouldMute = !isAudioActive
+        let twitchURL = "https://player.twitch.tv/?channel=\(stream.userLogin)&parent=localhost&muted=\(shouldMute)&autoplay=true&controls=false"
+        
+        // Load the stream with current audio state
+        let html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { 
+                    width: 100%; 
+                    height: 100%; 
+                    background: #000; 
+                    overflow: hidden;
+                }
+                iframe { 
+                    width: 100%; 
+                    height: 100%; 
+                    border: none;
+                }
+            </style>
+        </head>
+        <body>
+            <iframe 
+                id="twitchPlayer"
+                src="\(twitchURL)"
+                frameborder="0" 
+                allowfullscreen="true" 
+                scrolling="no">
+            </iframe>
+            <script>
+                console.log("Loading Twitch stream: \(stream.userLogin), muted: \(shouldMute)");
+                
+                // Listen for audio state changes
+                window.addEventListener('message', function(event) {
+                    if (event.data.type === 'updateAudio') {
+                        const iframe = document.getElementById('twitchPlayer');
+                        const newSrc = event.data.muted ? 
+                            "\(twitchURL.replacingOccurrences(of: "muted=\(shouldMute)", with: "muted=true"))" :
+                            "\(twitchURL.replacingOccurrences(of: "muted=\(shouldMute)", with: "muted=false"))";
+                        iframe.src = newSrc;
+                    }
+                });
+                
+                // Signal that the stream has loaded
+                setTimeout(function() {
+                    window.webkit.messageHandlers.streamLoaded.postMessage('loaded');
+                }, 2000);
+            </script>
+        </body>
+        </html>
+        """
+        
+        webView.loadHTMLString(html, baseURL: URL(string: "https://player.twitch.tv"))
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+        var parent: AutoPlayTwitchPlayer
+        
+        init(_ parent: AutoPlayTwitchPlayer) {
+            self.parent = parent
+            super.init()
+        }
+        
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            print("✅ Stream loaded: \(parent.stream.userLogin)")
+            parent.onLoadComplete()
+        }
+        
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            print("❌ Stream failed: \(error.localizedDescription)")
+        }
+        
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "streamLoaded" {
+                parent.onLoadComplete()
+            }
+        }
+    }
+}
+
+// MARK: - Simple Twitch Player Components
+
+struct SimpleTwitchPlayer: UIViewRepresentable {
+    let channelName: String
+    let isCompact: Bool
+    
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+        config.allowsPictureInPictureMediaPlayback = false
+        
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.backgroundColor = UIColor.black
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        webView.navigationDelegate = context.coordinator
+        
+        return webView
+    }
+    
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        // Use Twitch's mobile-optimized embed
+        let html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body { 
+                    width: 100%; 
+                    height: 100%; 
+                    background: #000; 
+                    overflow: hidden;
+                }
+                #twitch-embed { 
+                    width: 100%; 
+                    height: 100%; 
+                }
+            </style>
+        </head>
+        <body>
+            <div id="twitch-embed"></div>
+            <script src="https://embed.twitch.tv/embed/v1.js"></script>
+            <script>
+                try {
+                    new Twitch.Embed("twitch-embed", {
+                        width: "100%",
+                        height: "100%",
+                        channel: "\(channelName)",
+                        layout: "video-with-chat",
+                        autoplay: true,
+                        muted: \(isCompact ? "true" : "false"),
+                        controls: true,
+                        allowfullscreen: true,
+                        parent: ["localhost", "127.0.0.1", "player.twitch.tv"]
+                    });
+                    console.log("Twitch embed loaded for: \(channelName)");
+                } catch (error) {
+                    console.error("Failed to load Twitch embed:", error);
+                    // Fallback to direct iframe
+                    document.getElementById("twitch-embed").innerHTML = 
+                        '<iframe src="https://player.twitch.tv/?channel=\(channelName)&parent=localhost&muted=\(isCompact ? "true" : "false")&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>';
+                }
+            </script>
+        </body>
+        </html>
+        """
+        
+        print("🎥 Loading Twitch channel: \(channelName)")
+        webView.loadHTMLString(html, baseURL: URL(string: "https://player.twitch.tv"))
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    class Coordinator: NSObject, WKNavigationDelegate {
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            print("✅ WebView finished loading")
+        }
+        
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            print("❌ WebView failed: \(error.localizedDescription)")
+        }
+        
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            print("❌ WebView provisional load failed: \(error.localizedDescription)")
+        }
+    }
+}
+
+struct SimpleCompactPlayer: View {
+    let stream: TwitchStream
+    @State private var showingFullscreen = false
+    @State private var useDirectURL = true  // Start with direct URL for better reliability
+    @StateObject private var audioManager = MultiStreamAudioManager.shared
+    @State private var isStreamLoaded = false
+    
+    var body: some View {
+        ZStack {
+            Color.black
+            
+            // Auto-playing Twitch stream with audio management
+            AutoPlayTwitchPlayer(
+                stream: stream,
+                isAudioActive: audioManager.isStreamAudioActive(stream.id),
+                onLoadComplete: {
+                    isStreamLoaded = true
+                }
+            )
+            
+            // Stream controls overlay
+            VStack {
+                HStack {
+                    Text(stream.userName)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(4)
+                    
+                    Spacer()
+                    
+                    // Audio toggle button
+                    Button(action: {
+                        audioManager.setActiveAudioStream(stream.id)
+                    }) {
+                        Image(systemName: audioManager.isStreamAudioActive(stream.id) ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                            .font(.caption)
+                            .foregroundColor(audioManager.isStreamAudioActive(stream.id) ? .green : .white)
+                            .padding(6)
+                            .background(Color.black.opacity(0.7))
+                            .clipShape(Circle())
+                    }
+                    
+                    // Fullscreen button
+                    Button(action: {
+                        showingFullscreen = true
+                    }) {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .padding(6)
+                            .background(Color.black.opacity(0.7))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(8)
+                
+                Spacer()
+                
+                HStack {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 4, height: 4)
+                        
+                        Text(stream.formattedViewerCount)
+                            .font(.caption2)
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(3)
+                    
+                    Spacer()
+                    
+                    // Audio indicator
+                    if audioManager.isStreamAudioActive(stream.id) {
+                        HStack(spacing: 2) {
+                            ForEach(0..<3) { i in
+                                Rectangle()
+                                    .fill(Color.green)
+                                    .frame(width: 2, height: CGFloat.random(in: 4...12))
+                                    .animation(.easeInOut(duration: 0.5).repeatForever(), value: UUID())
+                            }
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(3)
+                    }
+                }
+                .padding(8)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .sheet(isPresented: $showingFullscreen) {
+            NavigationView {
+                ZStack {
+                    Color.black
+                    WebView(url: URL(string: "https://www.twitch.tv/\(stream.userLogin)")!)
+                }
+                .navigationTitle(stream.userName)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            showingFullscreen = false
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Simple WebView for direct URL loading
+struct WebView: UIViewRepresentable {
+    let url: URL
+    
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+        
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.backgroundColor = UIColor.black
+        webView.scrollView.isScrollEnabled = true
+        webView.scrollView.bounces = false
+        
+        return webView
+    }
+    
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        let request = URLRequest(url: url)
+        webView.load(request)
+    }
+}
+
+// MARK: - Advanced Twitch Player Components
+
+struct TwitchEmbedPlayerView: UIViewRepresentable {
+    let stream: TwitchStream
+    let isCompact: Bool
+    @Binding var isLoading: Bool
+    
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+        config.allowsPictureInPictureMediaPlayback = false
+        
+        // Add user content controller for message handling
+        let contentController = WKUserContentController()
+        contentController.add(context.coordinator, name: "loadingHandler")
+        config.userContentController = contentController
+        
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        webView.backgroundColor = UIColor.black
+        webView.isOpaque = true
+        webView.allowsBackForwardNavigationGestures = false
+        
+        return webView
+    }
+    
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        // Use direct Twitch player URL instead of embed API
+        let twitchURL = "https://player.twitch.tv/?channel=\(stream.userLogin)&parent=localhost&autoplay=\(isCompact ? "false" : "true")&muted=\(isCompact ? "true" : "false")"
+        
+        print("🎥 Loading Twitch stream: \(twitchURL)")
+        
+        if let url = URL(string: twitchURL) {
+            let request = URLRequest(url: url)
+            webView.load(request)
+        } else {
+            print("❌ Invalid Twitch URL: \(twitchURL)")
+        }
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        let parent: TwitchEmbedPlayerView
+        
+        init(_ parent: TwitchEmbedPlayerView) {
+            self.parent = parent
+            super.init()
+        }
+        
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            DispatchQueue.main.async {
+                self.parent.isLoading = false
+            }
+        }
+        
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            DispatchQueue.main.async {
+                self.parent.isLoading = true
+            }
+        }
+        
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            print("WebView failed to load: \(error.localizedDescription)")
+            DispatchQueue.main.async {
+                self.parent.isLoading = false
+            }
+        }
+        
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "loadingHandler" {
+                DispatchQueue.main.async {
+                    self.parent.isLoading = false
+                }
+            }
+        }
+    }
+}
+
+struct CompactTwitchPlayerView: View {
+    let stream: TwitchStream
+    @State private var isLoading = true
+    @State private var showingFullscreen = false
+    @State private var loadFailed = false
+    
+    var body: some View {
+        ZStack {
+            Color.black
+            
+            if loadFailed {
+                // Fallback to show thumbnail with play button
+                AsyncImage(url: URL(string: stream.thumbnailUrl.replacingOccurrences(of: "{width}", with: "320").replacingOccurrences(of: "{height}", with: "180"))) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(16/9, contentMode: .fill)
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .aspectRatio(16/9, contentMode: .fill)
+                }
+                .overlay(
+                    Button(action: {
+                        showingFullscreen = true
+                    }) {
+                        Circle()
+                            .fill(Color.black.opacity(0.7))
+                            .frame(width: 50, height: 50)
+                            .overlay(
+                                Image(systemName: "play.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                            )
+                    }
+                )
+            } else {
+                TwitchEmbedPlayerView(
+                    stream: stream,
+                    isCompact: true,
+                    isLoading: $isLoading
+                )
+                .onAppear {
+                    // Set a timeout to show fallback if loading takes too long
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                        if isLoading {
+                            loadFailed = true
+                            isLoading = false
+                        }
+                    }
+                }
+            }
+            
+            if isLoading && !loadFailed {
+                VStack {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    Text("Loading \(stream.userName)")
+                        .font(.caption)
+                        .foregroundColor(.white)
+                }
+            }
+            
+            // Overlay controls for compact view
+            VStack {
+                HStack {
+                    Text(stream.userName)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(4)
+                    
+                    Spacer()
+                    
+                    if !loadFailed {
+                        Button(action: {
+                            showingFullscreen = true
+                        }) {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .padding(6)
+                                .background(Color.black.opacity(0.7))
+                                .clipShape(Circle())
+                        }
+                    }
+                }
+                .padding(8)
+                
+                Spacer()
+                
+                HStack {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 4, height: 4)
+                        
+                        Text(stream.formattedViewerCount)
+                            .font(.caption2)
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(3)
+                    
+                    Spacer()
+                }
+                .padding(8)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .fullScreenCover(isPresented: $showingFullscreen) {
+            FullscreenTwitchPlayerView(stream: stream) {
+                showingFullscreen = false
+            }
+        }
+    }
+}
+
+struct FullscreenTwitchPlayerView: View {
+    let stream: TwitchStream
+    let onDismiss: () -> Void
+    @State private var isLoading = true
+    @State private var showControls = true
+    @State private var controlsTimer: Timer?
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            TwitchEmbedPlayerView(
+                stream: stream,
+                isCompact: false,
+                isLoading: $isLoading
+            )
+            
+            if isLoading {
+                VStack {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                    
+                    Text("Loading \(stream.userName)")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.top)
+                }
+            }
+            
+            // Fullscreen controls
+            if showControls && !isLoading {
+                VStack {
+                    HStack {
+                        Button(action: onDismiss) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title)
+                                .foregroundColor(.white)
+                                .background(Color.black.opacity(0.5))
+                                .clipShape(Circle())
+                        }
+                        .padding()
+                        
+                        Spacer()
+                    }
+                    
+                    Spacer()
+                    
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(stream.title)
+                                .font(.headline)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .lineLimit(2)
+                            
+                            HStack {
+                                Text(stream.userName)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.purple)
+                                
+                                Spacer()
+                                
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 6, height: 6)
+                                    
+                                    Text("LIVE • \(stream.formattedViewerCount)")
+                                        .font(.caption)
+                                        .foregroundColor(.white)
+                                }
+                            }
+                            
+                            if !stream.gameName.isEmpty {
+                                Text("Playing: \(stream.gameName)")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding()
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.black.opacity(0.8), Color.clear]),
+                            startPoint: .bottom,
+                            endPoint: .top
+                        )
+                    )
+                }
+                .transition(.opacity)
+            }
+        }
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showControls.toggle()
+            }
+            resetControlsTimer()
+        }
+        .onAppear {
+            resetControlsTimer()
+        }
+        .onDisappear {
+            controlsTimer?.invalidate()
+        }
+    }
+    
+    private func resetControlsTimer() {
+        controlsTimer?.invalidate()
+        controlsTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showControls = false
+            }
+        }
     }
 }
 

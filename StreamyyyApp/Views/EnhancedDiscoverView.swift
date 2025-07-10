@@ -16,12 +16,15 @@ struct EnhancedDiscoverView: View {
         youtubeService: YouTubeService(),
         rumbleService: RumbleService()
     )
+    @EnvironmentObject var navigationCoordinator: NavigationCoordinator
+    @EnvironmentObject var streamManager: StreamManager
     
     @State private var searchText = ""
     @State private var selectedPlatforms: Set<Platform> = [.twitch, .youtube, .rumble]
     @State private var showFilters = false
     @State private var searchFilters = SearchFilters()
     @State private var selectedTab: DiscoveryTab = .featured
+    @State private var showingQuickActions = false
     
     enum DiscoveryTab: String, CaseIterable {
         case featured = "Featured"
@@ -51,6 +54,9 @@ struct EnhancedDiscoverView: View {
                 // Content
                 ScrollView {
                     LazyVStack(spacing: 20) {
+                        // Quick Action Buttons (Prominent at top)
+                        quickActionButtonsSection
+                        
                         switch selectedTab {
                         case .featured:
                             featuredContent
@@ -105,6 +111,11 @@ struct EnhancedDiscoverView: View {
                     .onSubmit {
                         selectedTab = .search
                         performSearch()
+                    }
+                    .onChange(of: searchText) { newValue in
+                        if !newValue.isEmpty {
+                            selectedTab = .search
+                        }
                     }
                 
                 if !searchText.isEmpty {
@@ -167,6 +178,116 @@ struct EnhancedDiscoverView: View {
             }
         }
         .background(.regularMaterial)
+    }
+    
+    // MARK: - Quick Action Buttons Section
+    
+    private var quickActionButtonsSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Quick Actions")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Button(action: { 
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        showingQuickActions.toggle()
+                    }
+                }) {
+                    Image(systemName: showingQuickActions ? "chevron.up" : "chevron.down")
+                        .foregroundColor(.blue)
+                        .font(.title3)
+                }
+            }
+            
+            // Main Action Buttons - Always Visible
+            HStack(spacing: 12) {
+                // Navigate to MultiStream Button
+                NavigationActionButton(
+                    title: "Multi-Stream",
+                    subtitle: "Watch Multiple",
+                    icon: "rectangle.3.group.fill",
+                    color: .blue,
+                    isHighlighted: true
+                ) {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                        navigationCoordinator.navigateToMultiStream(animated: true)
+                    }
+                }
+                
+                // Quick Add Stream Button
+                NavigationActionButton(
+                    title: "Add Stream",
+                    subtitle: "Quick Add",
+                    icon: "plus.circle.fill",
+                    color: .green
+                ) {
+                    navigationCoordinator.showAddStreamSheet()
+                }
+                
+                // Stream Picker Button
+                NavigationActionButton(
+                    title: "Browse All",
+                    subtitle: "Live Streams",
+                    icon: "tv.fill",
+                    color: .orange
+                ) {
+                    navigationCoordinator.showStreamPicker()
+                }
+            }
+            
+            // Additional Actions - Expandable
+            if showingQuickActions {
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: 12) {
+                    QuickActionCard(
+                        title: "Saved Layouts",
+                        description: "Access your favorite configurations",
+                        icon: "bookmark.circle.fill",
+                        color: .purple
+                    ) {
+                        navigationCoordinator.navigateToTab(.favorites, animated: true)
+                    }
+                    
+                    QuickActionCard(
+                        title: "Settings",
+                        description: "Customize your experience",
+                        icon: "gear.circle.fill",
+                        color: .gray
+                    ) {
+                        navigationCoordinator.push(.settings)
+                    }
+                    
+                    QuickActionCard(
+                        title: "Layout Editor",
+                        description: "Create custom layouts",
+                        icon: "rectangle.3.offgrid.fill",
+                        color: .cyan
+                    ) {
+                        navigationCoordinator.push(.layoutCustomization)
+                    }
+                    
+                    QuickActionCard(
+                        title: "Profile",
+                        description: "Manage your account",
+                        icon: "person.circle.fill",
+                        color: .indigo
+                    ) {
+                        navigationCoordinator.navigateToTab(.profile, animated: true)
+                    }
+                }
+                .transition(.asymmetric(
+                    insertion: .scale.combined(with: .opacity),
+                    removal: .scale.combined(with: .opacity)
+                ))
+            }
+        }
+        .padding(.vertical, 8)
     }
     
     // MARK: - Content Sections
@@ -413,6 +534,8 @@ struct PlatformFilterChip: View {
 
 struct StreamDiscoveryCard: View {
     let stream: DiscoveredStream
+    @EnvironmentObject var navigationCoordinator: NavigationCoordinator
+    @EnvironmentObject var streamManager: StreamManager
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -439,6 +562,19 @@ struct StreamDiscoveryCard: View {
                 if stream.isLive {
                     liveBadge
                 }
+            }
+            .overlay(alignment: .topTrailing) {
+                // Add to MultiStream button
+                Button(action: {
+                    addToMultiStream()
+                }) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(.white)
+                        .background(Circle().fill(.blue))
+                        .padding(6)
+                }
+                .buttonStyle(ScaleButtonStyle())
             }
             
             // Info
@@ -477,6 +613,24 @@ struct StreamDiscoveryCard: View {
             }
         }
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .onTapGesture {
+            // Navigate to stream detail or add to current multistream
+            addToMultiStream()
+        }
+    }
+    
+    private func addToMultiStream() {
+        // Add stream to manager and navigate to MultiStream
+        streamManager.addStream(url: stream.streamURL)
+        
+        // Show feedback and navigate
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+            navigationCoordinator.navigateToMultiStream(animated: true)
+        }
+        
+        // Provide haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
     }
     
     private var platformBadge: some View {
@@ -709,8 +863,137 @@ struct EmptyStateView: View {
     }
 }
 
+// MARK: - Navigation Components
+
+struct NavigationActionButton: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+    let isHighlighted: Bool
+    let action: () -> Void
+    
+    init(title: String, subtitle: String, icon: String, color: Color, isHighlighted: Bool = false, action: @escaping () -> Void) {
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
+        self.color = color
+        self.isHighlighted = isHighlighted
+        self.action = action
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                ZStack {
+                    if isHighlighted {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [color, color.opacity(0.7)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 50, height: 50)
+                            .overlay(
+                                Circle()
+                                    .stroke(.white.opacity(0.3), lineWidth: 1)
+                            )
+                    } else {
+                        Circle()
+                            .fill(.regularMaterial)
+                            .frame(width: 50, height: 50)
+                            .overlay(
+                                Circle()
+                                    .stroke(color.opacity(0.5), lineWidth: 1)
+                            )
+                    }
+                    
+                    Image(systemName: icon)
+                        .font(.title2)
+                        .foregroundColor(isHighlighted ? .white : color)
+                }
+                
+                VStack(spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                    
+                    Text(subtitle)
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(ScaleButtonStyle())
+    }
+}
+
+struct QuickActionCard: View {
+    let title: String
+    let description: String
+    let icon: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: icon)
+                        .font(.title2)
+                        .foregroundColor(color)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                    
+                    Text(description)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.regularMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(color.opacity(0.3), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(ScaleButtonStyle())
+    }
+}
+
+// MARK: - Button Style
+
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
 // MARK: - Preview
 
 #Preview {
     EnhancedDiscoverView()
+        .environmentObject(NavigationCoordinator())
 }

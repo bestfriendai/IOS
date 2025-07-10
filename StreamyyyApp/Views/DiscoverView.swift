@@ -3,6 +3,7 @@
 //  StreamyyyApp
 //
 //  Created by Streamyyy Team
+//  Enhanced with modern design system components and improved UX
 //
 
 import SwiftUI
@@ -14,38 +15,66 @@ struct DiscoverView: View {
     @State private var featuredStreams: [FeaturedStream] = []
     @State private var trendingStreams: [TrendingStream] = []
     @State private var isLoading = false
+    @State private var showingStreamAddedPopup = false
+    @State private var addedStreamTitle = ""
+    @State private var viewMode: ViewMode = .grid
+    
+    private let columns = [
+        GridItem(.flexible(), spacing: StreamyyySpacing.streamGridSpacing),
+        GridItem(.flexible(), spacing: StreamyyySpacing.streamGridSpacing)
+    ]
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Search Bar
-                    SearchBar(text: $searchText)
-                        .padding(.horizontal)
-                    
-                    // Category Filter
-                    CategoryFilterView(selectedCategory: $selectedCategory)
-                    
-                    // Featured Section
-                    if !featuredStreams.isEmpty {
-                        FeaturedStreamsSection(streams: featuredStreams)
+            ZStack {
+                // Background
+                StreamyyyColors.background
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    LazyVStack(spacing: StreamyyySpacing.sectionSpacing) {
+                        // Search Section
+                        modernSearchSection
+                        
+                        // Category Filter
+                        modernCategoryFilter
+                        
+                        // Featured Section
+                        if !featuredStreams.isEmpty {
+                            modernFeaturedSection
+                        }
+                        
+                        // View Mode Toggle and Trending Section
+                        VStack(spacing: StreamyyySpacing.md) {
+                            trendingSectionHeader
+                            modernTrendingSection
+                        }
+                        
+                        // Popular Categories
+                        modernCategoriesSection
+                        
+                        // Quick Add Section
+                        modernQuickAddSection
                     }
-                    
-                    // Trending Section
-                    TrendingStreamsSection(streams: filteredTrendingStreams)
-                    
-                    // Popular Categories
-                    PopularCategoriesSection()
-                    
-                    // Quick Add Section
-                    QuickAddSection()
+                    .screenPadding()
+                    .padding(.bottom, StreamyyySpacing.xxl) // Extra padding for tab bar
                 }
-                .padding(.bottom, 100) // Extra padding for tab bar
+                .refreshable {
+                    await loadDiscoverContent()
+                }
+                
+                // Loading overlay
+                if isLoading {
+                    loadingOverlay
+                }
             }
             .navigationTitle("Discover")
             .navigationBarTitleDisplayMode(.large)
-            .refreshable {
-                await loadDiscoverContent()
+            .sheet(isPresented: $showingStreamAddedPopup) {
+                StreamAddedPopup(
+                    streamTitle: addedStreamTitle,
+                    isPresented: $showingStreamAddedPopup
+                )
             }
         }
         .onAppear {
@@ -55,6 +84,248 @@ struct DiscoverView: View {
         }
     }
     
+    // MARK: - Modern UI Sections
+    
+    private var modernSearchSection: some View {
+        StreamyyyCard(style: .default, shadowStyle: .default) {
+            HStack(spacing: StreamyyySpacing.sm) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: StreamyyySpacing.iconSizeMD, weight: .medium))
+                    .foregroundColor(StreamyyyColors.textSecondary)
+                
+                TextField("Search streams, games, or creators", text: $searchText)
+                    .font(StreamyyyTypography.bodyLarge)
+                    .foregroundColor(StreamyyyColors.textPrimary)
+                    .textFieldStyle(.plain)
+                    .autocorrectionDisabled()
+                
+                if !searchText.isEmpty {
+                    Button(action: { 
+                        searchText = "" 
+                        StreamyyyDesignSystem.hapticFeedback(.light)
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: StreamyyySpacing.iconSizeMD, weight: .medium))
+                            .foregroundColor(StreamyyyColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .accessibilityLabel("Search streams and content")
+        .accessibilityHint("Enter text to search for streams, games, or creators")
+    }
+    
+    private var modernCategoryFilter: some View {
+        VStack(alignment: .leading, spacing: StreamyyySpacing.md) {
+            HStack {
+                Text("Categories")
+                    .titleMedium()
+                    .foregroundColor(StreamyyyColors.textPrimary)
+                Spacer()
+            }
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: StreamyyySpacing.sm) {
+                    ForEach(StreamCategory.allCases, id: \.self) { category in
+                        ModernCategoryChip(
+                            category: category,
+                            isSelected: selectedCategory == category
+                        ) {
+                            selectedCategory = category
+                            StreamyyyDesignSystem.hapticSelection()
+                        }
+                    }
+                }
+                .padding(.horizontal, StreamyyySpacing.screenPadding)
+            }
+            .padding(.horizontal, -StreamyyySpacing.screenPadding)
+        }
+    }
+    
+    private var modernFeaturedSection: some View {
+        VStack(alignment: .leading, spacing: StreamyyySpacing.md) {
+            HStack {
+                Text("Featured")
+                    .titleMedium()
+                    .foregroundColor(StreamyyyColors.textPrimary)
+                
+                Spacer()
+                
+                Button("See All") {
+                    // Handle see all action
+                    StreamyyyDesignSystem.hapticFeedback(.light)
+                }
+                .font(StreamyyyTypography.labelMedium)
+                .foregroundColor(StreamyyyColors.primary)
+            }
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: StreamyyySpacing.md) {
+                    ForEach(featuredStreams, id: \.id) { stream in
+                        ModernFeaturedStreamCard(stream: stream) {
+                            addStream(stream.url, title: stream.title)
+                        }
+                    }
+                }
+                .padding(.horizontal, StreamyyySpacing.screenPadding)
+            }
+            .padding(.horizontal, -StreamyyySpacing.screenPadding)
+        }
+    }
+    
+    private var trendingSectionHeader: some View {
+        HStack {
+            Text("Trending")
+                .titleMedium()
+                .foregroundColor(StreamyyyColors.textPrimary)
+            
+            Spacer()
+            
+            // View mode toggle
+            HStack(spacing: StreamyyySpacing.xs) {
+                ForEach(ViewMode.allCases, id: \.self) { mode in
+                    Button(action: {
+                        viewMode = mode
+                        StreamyyyDesignSystem.hapticSelection()
+                    }) {
+                        Image(systemName: mode.icon)
+                            .font(.system(size: StreamyyySpacing.iconSizeSM, weight: .medium))
+                            .foregroundColor(viewMode == mode ? StreamyyyColors.primary : StreamyyyColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, StreamyyySpacing.sm)
+            .padding(.vertical, StreamyyySpacing.xs)
+            .background(StreamyyyColors.surface)
+            .cornerRadius(StreamyyySpacing.cornerRadiusSM)
+        }
+    }
+    
+    private var modernTrendingSection: some View {
+        Group {
+            if viewMode == .grid {
+                LazyVGrid(columns: columns, spacing: StreamyyySpacing.md) {
+                    ForEach(Array(filteredTrendingStreams.enumerated()), id: \.element.id) { index, stream in
+                        ModernTrendingStreamCard(
+                            stream: stream,
+                            rank: index + 1,
+                            viewMode: .grid
+                        ) {
+                            addStream(stream.url, title: stream.title)
+                        }
+                    }
+                }
+            } else {
+                LazyVStack(spacing: StreamyyySpacing.sm) {
+                    ForEach(Array(filteredTrendingStreams.enumerated()), id: \.element.id) { index, stream in
+                        ModernTrendingStreamCard(
+                            stream: stream,
+                            rank: index + 1,
+                            viewMode: .list
+                        ) {
+                            addStream(stream.url, title: stream.title)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private var modernCategoriesSection: some View {
+        VStack(alignment: .leading, spacing: StreamyyySpacing.md) {
+            HStack {
+                Text("Popular Categories")
+                    .titleMedium()
+                    .foregroundColor(StreamyyyColors.textPrimary)
+                
+                Spacer()
+            }
+            
+            LazyVGrid(columns: columns, spacing: StreamyyySpacing.md) {
+                ForEach(popularCategories, id: \.name) { category in
+                    ModernCategoryCard(
+                        name: category.name,
+                        icon: category.icon,
+                        color: category.color,
+                        streamCount: category.streamCount
+                    ) {
+                        // Handle category selection
+                        StreamyyyDesignSystem.hapticFeedback(.light)
+                    }
+                }
+            }
+        }
+    }
+    
+    private var modernQuickAddSection: some View {
+        VStack(spacing: StreamyyySpacing.md) {
+            HStack {
+                Text("Quick Actions")
+                    .titleMedium()
+                    .foregroundColor(StreamyyyColors.textPrimary)
+                
+                Spacer()
+            }
+            
+            StreamyyyCard(
+                style: .default,
+                shadowStyle: .default,
+                isInteractive: true,
+                onTap: {
+                    // Handle add custom stream
+                    StreamyyyDesignSystem.hapticFeedback(.medium)
+                }
+            ) {
+                HStack(spacing: StreamyyySpacing.md) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: StreamyyySpacing.iconSizeLG, weight: .medium))
+                        .foregroundColor(StreamyyyColors.primary)
+                    
+                    VStack(alignment: .leading, spacing: StreamyyySpacing.xs) {
+                        Text("Add Custom Stream")
+                            .font(StreamyyyTypography.titleSmall)
+                            .foregroundColor(StreamyyyColors.textPrimary)
+                        
+                        Text("Enter any stream URL manually")
+                            .font(StreamyyyTypography.bodySmall)
+                            .foregroundColor(StreamyyyColors.textSecondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: StreamyyySpacing.iconSizeSM, weight: .medium))
+                        .foregroundColor(StreamyyyColors.textTertiary)
+                }
+            }
+        }
+    }
+    
+    private var loadingOverlay: some View {
+        ZStack {
+            StreamyyyColors.overlay
+                .opacity(0.3)
+                .ignoresSafeArea()
+            
+            StreamyyyCard(style: .glass, shadowStyle: .floating) {
+                VStack(spacing: StreamyyySpacing.md) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: StreamyyyColors.primary))
+                        .scaleEffect(1.2)
+                    
+                    Text("Loading streams...")
+                        .font(StreamyyyTypography.bodyMedium)
+                        .foregroundColor(StreamyyyColors.textPrimary)
+                }
+                .padding(StreamyyySpacing.lg)
+            }
+        }
+    }
+    
+    // MARK: - Computed Properties
+    
     private var filteredTrendingStreams: [TrendingStream] {
         if selectedCategory == .all {
             return trendingStreams
@@ -62,11 +333,31 @@ struct DiscoverView: View {
         return trendingStreams.filter { $0.category == selectedCategory }
     }
     
+    private var popularCategories: [PopularCategory] {
+        return [
+            PopularCategory(name: "Gaming", icon: "gamecontroller.fill", color: StreamyyyColors.primary, streamCount: 1234),
+            PopularCategory(name: "Just Chatting", icon: "bubble.left.and.bubble.right.fill", color: StreamyyyColors.secondary, streamCount: 856),
+            PopularCategory(name: "Music", icon: "music.note", color: .orange, streamCount: 492),
+            PopularCategory(name: "Art", icon: "paintbrush.fill", color: .purple, streamCount: 234),
+            PopularCategory(name: "Tech", icon: "laptopcomputer", color: .blue, streamCount: 156),
+            PopularCategory(name: "Sports", icon: "sportscourt.fill", color: .green, streamCount: 89)
+        ]
+    }
+    
+    // MARK: - Actions
+    
+    private func addStream(_ url: String, title: String) {
+        streamManager.addStream(url: url)
+        addedStreamTitle = title
+        showingStreamAddedPopup = true
+        StreamyyyDesignSystem.hapticNotification(.success)
+    }
+    
     private func loadDiscoverContent() async {
         isLoading = true
         
         // Simulate API calls
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
         
         featuredStreams = [
             FeaturedStream(
@@ -75,7 +366,7 @@ struct DiscoverView: View {
                 game: "VALORANT",
                 viewers: 45000,
                 thumbnailURL: "https://example.com/thumb1.jpg",
-                platform: .twitch,
+                platform: Platform.twitch,
                 url: "https://twitch.tv/shroud"
             ),
             FeaturedStream(
@@ -84,8 +375,17 @@ struct DiscoverView: View {
                 game: "Just Chatting",
                 viewers: 32000,
                 thumbnailURL: "https://example.com/thumb2.jpg",
-                platform: .twitch,
+                platform: Platform.twitch,
                 url: "https://twitch.tv/pokimane"
+            ),
+            FeaturedStream(
+                id: "3",
+                title: "TheGrefg",
+                game: "Fortnite",
+                viewers: 28000,
+                thumbnailURL: "https://example.com/thumb3.jpg",
+                platform: Platform.twitch,
+                url: "https://twitch.tv/thegrefg"
             )
         ]
         
@@ -96,7 +396,7 @@ struct DiscoverView: View {
                 game: "Grand Theft Auto V",
                 viewers: 78000,
                 category: .gaming,
-                platform: .twitch,
+                platform: Platform.twitch,
                 url: "https://twitch.tv/xqc"
             ),
             TrendingStream(
@@ -105,7 +405,7 @@ struct DiscoverView: View {
                 game: "Tech Review",
                 viewers: 15000,
                 category: .tech,
-                platform: .youtube,
+                platform: Platform.youtube,
                 url: "https://youtube.com/@mkbhd"
             ),
             TrendingStream(
@@ -114,8 +414,35 @@ struct DiscoverView: View {
                 game: "Fortnite",
                 viewers: 25000,
                 category: .gaming,
-                platform: .twitch,
+                platform: Platform.twitch,
                 url: "https://twitch.tv/ninja"
+            ),
+            TrendingStream(
+                id: "4",
+                title: "Gaules",
+                game: "Counter-Strike 2",
+                viewers: 42000,
+                category: .gaming,
+                platform: Platform.twitch,
+                url: "https://twitch.tv/gaules"
+            ),
+            TrendingStream(
+                id: "5",
+                title: "HasanAbi",
+                game: "Just Chatting",
+                viewers: 31000,
+                category: .chatting,
+                platform: Platform.twitch,
+                url: "https://twitch.tv/hasanabi"
+            ),
+            TrendingStream(
+                id: "6",
+                title: "ibai",
+                game: "Music",
+                viewers: 19000,
+                category: .music,
+                platform: Platform.twitch,
+                url: "https://twitch.tv/ibai"
             )
         ]
         
@@ -123,369 +450,421 @@ struct DiscoverView: View {
     }
 }
 
-// MARK: - Search Bar
-struct SearchBar: View {
-    @Binding var text: String
-    
-    var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-            
-            TextField("Search streams, games, or creators", text: $text)
-                .textFieldStyle(PlainTextFieldStyle())
-            
-            if !text.isEmpty {
-                Button(action: { text = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .padding(12)
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
-    }
-}
+// MARK: - Modern Components
 
-// MARK: - Category Filter
-struct CategoryFilterView: View {
-    @Binding var selectedCategory: StreamCategory
+// MARK: - View Mode
+enum ViewMode: String, CaseIterable {
+    case grid = "grid"
+    case list = "list"
     
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(StreamCategory.allCases, id: \.self) { category in
-                    CategoryChip(
-                        category: category,
-                        isSelected: selectedCategory == category
-                    ) {
-                        selectedCategory = category
-                    }
-                }
-            }
-            .padding(.horizontal)
+    var icon: String {
+        switch self {
+        case .grid: return "square.grid.2x2"
+        case .list: return "list.bullet"
         }
     }
 }
 
-struct CategoryChip: View {
+// MARK: - Popular Category Model
+struct PopularCategory {
+    let name: String
+    let icon: String
+    let color: Color
+    let streamCount: Int
+}
+
+// MARK: - Modern Category Chip
+struct ModernCategoryChip: View {
     let category: StreamCategory
     let isSelected: Bool
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: StreamyyySpacing.xs) {
                 Image(systemName: category.icon)
-                    .font(.caption)
+                    .font(.system(size: StreamyyySpacing.iconSizeXS, weight: .medium))
+                
                 Text(category.displayName)
-                    .font(.subheadline)
+                    .font(StreamyyyTypography.labelMedium)
                     .fontWeight(.medium)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(isSelected ? Color.purple : Color(.systemGray6))
-            .foregroundColor(isSelected ? .white : .primary)
-            .cornerRadius(20)
+            .padding(.horizontal, StreamyyySpacing.md)
+            .padding(.vertical, StreamyyySpacing.sm)
+            .background(isSelected ? StreamyyyColors.primary : StreamyyyColors.surface)
+            .foregroundColor(isSelected ? StreamyyyColors.textInverse : StreamyyyColors.textPrimary)
+            .cornerRadius(StreamyyySpacing.cornerRadiusLG)
+            .overlay(
+                RoundedRectangle(cornerRadius: StreamyyySpacing.cornerRadiusLG)
+                    .stroke(isSelected ? Color.clear : StreamyyyColors.border, lineWidth: StreamyyySpacing.borderWidthThin)
+            )
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
+        .scaleEffect(isSelected ? 1.05 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
+        .accessibilityLabel("\(category.displayName) category")
+        .accessibilityHint(isSelected ? "Currently selected" : "Tap to filter by this category")
     }
 }
 
-// MARK: - Featured Streams Section
-struct FeaturedStreamsSection: View {
-    let streams: [FeaturedStream]
-    @EnvironmentObject var streamManager: StreamManager
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Featured")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Spacer()
-            }
-            .padding(.horizontal)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(streams, id: \.id) { stream in
-                        FeaturedStreamCard(stream: stream) {
-                            streamManager.addStream(url: stream.url)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
-        }
-    }
-}
-
-struct FeaturedStreamCard: View {
+// MARK: - Modern Featured Stream Card
+struct ModernFeaturedStreamCard: View {
     let stream: FeaturedStream
     let action: () -> Void
+    @State private var isPressed = false
     
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
-                // Thumbnail
+        Button(action: {
+            StreamyyyDesignSystem.hapticFeedback(.medium)
+            action()
+        }) {
+            VStack(alignment: .leading, spacing: StreamyyySpacing.sm) {
+                // Thumbnail with overlay
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray5))
-                        .frame(width: 200, height: 112)
+                    RoundedRectangle(cornerRadius: StreamyyySpacing.streamThumbnailCornerRadius)
+                        .fill(StreamyyyColors.surfaceSecondary)
+                        .frame(width: 280, height: 157) // 16:9 aspect ratio
+                        .overlay(
+                            // Gradient overlay for better text readability
+                            LinearGradient(
+                                colors: [Color.clear, StreamyyyColors.overlay.opacity(0.6)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .cornerRadius(StreamyyySpacing.streamThumbnailCornerRadius)
+                        )
                     
-                    // Placeholder thumbnail
-                    VStack {
+                    // Placeholder content
+                    VStack(spacing: StreamyyySpacing.sm) {
                         Image(systemName: "play.tv.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white.opacity(0.7))
+                            .font(.system(size: StreamyyySpacing.iconSizeXL, weight: .medium))
+                            .foregroundColor(StreamyyyColors.textInverse.opacity(0.8))
                         
-                        Text("LIVE")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
+                        HStack(spacing: StreamyyySpacing.xs) {
+                            Circle()
+                                .fill(StreamyyyColors.liveIndicator)
+                                .frame(width: 6, height: 6)
+                            
+                            Text("LIVE")
+                                .font(StreamyyyTypography.liveIndicator)
+                                .foregroundColor(StreamyyyColors.textInverse)
+                        }
+                        .padding(.horizontal, StreamyyySpacing.sm)
+                        .padding(.vertical, StreamyyySpacing.xs)
+                        .background(StreamyyyColors.overlay.opacity(0.8))
+                        .cornerRadius(StreamyyySpacing.cornerRadiusXS)
                     }
                     
-                    // Live indicator
+                    // Viewer count overlay
                     VStack {
-                        HStack {
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(Color.red)
-                                    .frame(width: 6, height: 6)
-                                Text("LIVE")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.black.opacity(0.7))
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                            
-                            Spacer()
-                        }
                         Spacer()
-                        
                         HStack {
                             Spacer()
-                            Text("\(stream.viewers) viewers")
-                                .font(.caption2)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.black.opacity(0.7))
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
+                            
+                            Text(formatViewerCount(stream.viewers))
+                                .font(StreamyyyTypography.viewerCount)
+                                .foregroundColor(StreamyyyColors.textInverse)
+                                .padding(.horizontal, StreamyyySpacing.sm)
+                                .padding(.vertical, StreamyyySpacing.xs)
+                                .background(StreamyyyColors.overlay.opacity(0.8))
+                                .cornerRadius(StreamyyySpacing.cornerRadiusXS)
                         }
                     }
-                    .padding(8)
+                    .padding(StreamyyySpacing.sm)
                 }
                 
                 // Stream info
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: StreamyyySpacing.xs) {
                     Text(stream.title)
-                        .font(.headline)
+                        .font(StreamyyyTypography.streamTitle)
+                        .foregroundColor(StreamyyyColors.textPrimary)
                         .lineLimit(1)
                     
                     Text(stream.game)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .font(StreamyyyTypography.gameTitle)
+                        .foregroundColor(StreamyyyColors.textSecondary)
                         .lineLimit(1)
                     
-                    HStack {
+                    HStack(spacing: StreamyyySpacing.xs) {
                         Circle()
                             .fill(stream.platform.color)
-                            .frame(width: 12, height: 12)
+                            .frame(width: 10, height: 10)
+                        
                         Text(stream.platform.displayName)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(StreamyyyTypography.platformBadge)
+                            .foregroundColor(StreamyyyColors.textTertiary)
                     }
                 }
+                .frame(width: 280, alignment: .leading)
             }
         }
-        .buttonStyle(PlainButtonStyle())
-        .frame(width: 200)
+        .buttonStyle(.plain)
+        .scaleEffect(isPressed ? 0.95 : 1.0)
+        .animation(.easeInOut(duration: 0.1), value: isPressed)
+        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
+            isPressed = pressing
+        }, perform: {})
+        .accessibilityLabel("Featured stream: \(stream.title)")
+        .accessibilityHint("Streaming \(stream.game) with \(formatViewerCount(stream.viewers)) viewers. Tap to add to your multistream.")
     }
-}
-
-// MARK: - Trending Streams Section
-struct TrendingStreamsSection: View {
-    let streams: [TrendingStream]
-    @EnvironmentObject var streamManager: StreamManager
     
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Trending")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Spacer()
-            }
-            .padding(.horizontal)
-            
-            LazyVStack(spacing: 12) {
-                ForEach(Array(streams.enumerated()), id: \.element.id) { index, stream in
-                    TrendingStreamRow(stream: stream, rank: index + 1) {
-                        streamManager.addStream(url: stream.url)
-                    }
-                }
-            }
-            .padding(.horizontal)
+    private func formatViewerCount(_ count: Int) -> String {
+        if count >= 1000000 {
+            return String(format: "%.1fM", Double(count) / 1000000.0)
+        } else if count >= 1000 {
+            return String(format: "%.1fK", Double(count) / 1000.0)
+        } else {
+            return "\(count)"
         }
     }
 }
 
-struct TrendingStreamRow: View {
+// MARK: - Modern Trending Stream Card
+struct ModernTrendingStreamCard: View {
     let stream: TrendingStream
     let rank: Int
+    let viewMode: ViewMode
     let action: () -> Void
+    @State private var isPressed = false
     
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 16) {
-                // Rank
-                Text("#\(rank)")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.purple)
-                    .frame(width: 30)
+        StreamyyyCard(
+            style: .default,
+            shadowStyle: .default,
+            isInteractive: true,
+            onTap: {
+                StreamyyyDesignSystem.hapticFeedback(.medium)
+                action()
+            }
+        ) {
+            if viewMode == .grid {
+                gridLayout
+            } else {
+                listLayout
+            }
+        }
+        .scaleEffect(isPressed ? 0.98 : 1.0)
+        .animation(.easeInOut(duration: 0.1), value: isPressed)
+        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
+            isPressed = pressing
+        }, perform: {})
+        .accessibilityLabel("Trending stream #\(rank): \(stream.title)")
+        .accessibilityHint("Streaming \(stream.game) with \(formatViewerCount(stream.viewers)) viewers. Tap to add to your multistream.")
+    }
+    
+    private var gridLayout: some View {
+        VStack(alignment: .leading, spacing: StreamyyySpacing.sm) {
+            // Thumbnail placeholder
+            ZStack {
+                RoundedRectangle(cornerRadius: StreamyyySpacing.streamThumbnailCornerRadius)
+                    .fill(StreamyyyColors.surfaceSecondary)
+                    .aspectRatio(16/9, contentMode: .fit)
+                    .overlay(
+                        LinearGradient(
+                            colors: [Color.clear, StreamyyyColors.overlay.opacity(0.5)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .cornerRadius(StreamyyySpacing.streamThumbnailCornerRadius)
+                    )
                 
-                // Stream info
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(stream.title)
-                        .font(.headline)
-                        .lineLimit(1)
+                VStack(spacing: StreamyyySpacing.sm) {
+                    // Rank badge
+                    Text("#\(rank)")
+                        .font(StreamyyyTypography.labelLarge)
+                        .fontWeight(.bold)
+                        .foregroundColor(StreamyyyColors.textInverse)
+                        .padding(.horizontal, StreamyyySpacing.sm)
+                        .padding(.vertical, StreamyyySpacing.xs)
+                        .background(StreamyyyColors.primary)
+                        .cornerRadius(StreamyyySpacing.cornerRadiusXS)
                     
-                    Text(stream.game)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                    Image(systemName: "play.tv.fill")
+                        .font(.system(size: StreamyyySpacing.iconSizeLG, weight: .medium))
+                        .foregroundColor(StreamyyyColors.textInverse.opacity(0.8))
                 }
                 
-                Spacer()
-                
-                // Viewers and platform
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("\(stream.viewers) viewers")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(stream.platform.color)
-                            .frame(width: 8, height: 8)
-                        Text(stream.platform.displayName)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
+                // Viewer count overlay
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Text(formatViewerCount(stream.viewers))
+                            .font(StreamyyyTypography.viewerCount)
+                            .foregroundColor(StreamyyyColors.textInverse)
+                            .padding(.horizontal, StreamyyySpacing.sm)
+                            .padding(.vertical, StreamyyySpacing.xs)
+                            .background(StreamyyyColors.overlay.opacity(0.8))
+                            .cornerRadius(StreamyyySpacing.cornerRadiusXS)
                     }
                 }
-                
-                Image(systemName: "plus.circle")
-                    .foregroundColor(.purple)
+                .padding(StreamyyySpacing.sm)
             }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
-
-// MARK: - Popular Categories Section
-struct PopularCategoriesSection: View {
-    private let categories = [
-        ("Gaming", "gamecontroller", Color.blue),
-        ("Just Chatting", "bubble.left.and.bubble.right", Color.green),
-        ("Music", "music.note", Color.orange),
-        ("Art", "paintbrush", Color.purple),
-        ("Tech", "laptopcomputer", Color.gray),
-        ("Sports", "sportscourt", Color.red)
-    ]
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Popular Categories")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Spacer()
-            }
-            .padding(.horizontal)
             
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(categories, id: \.0) { category in
-                    CategoryCard(name: category.0, icon: category.1, color: category.2)
+            // Stream info
+            VStack(alignment: .leading, spacing: StreamyyySpacing.xs) {
+                Text(stream.title)
+                    .font(StreamyyyTypography.streamTitle)
+                    .foregroundColor(StreamyyyColors.textPrimary)
+                    .lineLimit(1)
+                
+                Text(stream.game)
+                    .font(StreamyyyTypography.gameTitle)
+                    .foregroundColor(StreamyyyColors.textSecondary)
+                    .lineLimit(1)
+                
+                HStack(spacing: StreamyyySpacing.xs) {
+                    Circle()
+                        .fill(stream.platform.color)
+                        .frame(width: 8, height: 8)
+                    
+                    Text(stream.platform.displayName)
+                        .font(StreamyyyTypography.platformBadge)
+                        .foregroundColor(StreamyyyColors.textTertiary)
+                    
+                    Spacer()
+                    
+                    StreamyyyIconButton(
+                        icon: "plus.circle.fill",
+                        style: .ghost,
+                        size: .small
+                    ) {
+                        action()
+                    }
                 }
             }
-            .padding(.horizontal)
+        }
+    }
+    
+    private var listLayout: some View {
+        HStack(spacing: StreamyyySpacing.md) {
+            // Rank
+            Text("#\(rank)")
+                .font(StreamyyyTypography.titleSmall)
+                .fontWeight(.bold)
+                .foregroundColor(StreamyyyColors.primary)
+                .frame(width: 32)
+            
+            // Thumbnail placeholder
+            ZStack {
+                RoundedRectangle(cornerRadius: StreamyyySpacing.streamThumbnailCornerRadius)
+                    .fill(StreamyyyColors.surfaceSecondary)
+                    .frame(width: 80, height: 45) // 16:9 aspect ratio
+                
+                Image(systemName: "play.tv.fill")
+                    .font(.system(size: StreamyyySpacing.iconSizeMD, weight: .medium))
+                    .foregroundColor(StreamyyyColors.textInverse.opacity(0.8))
+            }
+            
+            // Stream info
+            VStack(alignment: .leading, spacing: StreamyyySpacing.xs) {
+                Text(stream.title)
+                    .font(StreamyyyTypography.streamTitle)
+                    .foregroundColor(StreamyyyColors.textPrimary)
+                    .lineLimit(1)
+                
+                Text(stream.game)
+                    .font(StreamyyyTypography.gameTitle)
+                    .foregroundColor(StreamyyyColors.textSecondary)
+                    .lineLimit(1)
+                
+                HStack(spacing: StreamyyySpacing.xs) {
+                    Circle()
+                        .fill(stream.platform.color)
+                        .frame(width: 8, height: 8)
+                    
+                    Text(stream.platform.displayName)
+                        .font(StreamyyyTypography.platformBadge)
+                        .foregroundColor(StreamyyyColors.textTertiary)
+                }
+            }
+            
+            Spacer()
+            
+            // Viewers and add button
+            VStack(alignment: .trailing, spacing: StreamyyySpacing.xs) {
+                Text(formatViewerCount(stream.viewers))
+                    .font(StreamyyyTypography.viewerCount)
+                    .foregroundColor(StreamyyyColors.textSecondary)
+                
+                StreamyyyIconButton(
+                    icon: "plus.circle.fill",
+                    style: .ghost,
+                    size: .small
+                ) {
+                    action()
+                }
+            }
+        }
+    }
+    
+    private func formatViewerCount(_ count: Int) -> String {
+        if count >= 1000000 {
+            return String(format: "%.1fM", Double(count) / 1000000.0)
+        } else if count >= 1000 {
+            return String(format: "%.1fK", Double(count) / 1000.0)
+        } else {
+            return "\(count)"
         }
     }
 }
 
-struct CategoryCard: View {
+// MARK: - Modern Category Card
+struct ModernCategoryCard: View {
     let name: String
     let icon: String
     let color: Color
+    let streamCount: Int
+    let action: () -> Void
+    @State private var isPressed = false
     
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 30))
-                .foregroundColor(color)
-            
-            Text(name)
-                .font(.subheadline)
-                .fontWeight(.medium)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
-    }
-}
-
-// MARK: - Quick Add Section
-struct QuickAddSection: View {
-    @EnvironmentObject var streamManager: StreamManager
-    @State private var showingAddStream = false
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Text("Quick Actions")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Spacer()
-            }
-            .padding(.horizontal)
-            
-            VStack(spacing: 12) {
-                Button(action: { showingAddStream = true }) {
-                    HStack {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.purple)
+        Button(action: {
+            StreamyyyDesignSystem.hapticFeedback(.medium)
+            action()
+        }) {
+            StreamyyyCard(style: .default, shadowStyle: .default) {
+                VStack(spacing: StreamyyySpacing.md) {
+                    // Icon with background
+                    ZStack {
+                        Circle()
+                            .fill(color.opacity(0.1))
+                            .frame(width: 48, height: 48)
                         
-                        Text("Add Custom Stream")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        
-                        Spacer()
-                        
-                        Image(systemName: "chevron.right")
-                            .foregroundColor(.secondary)
+                        Image(systemName: icon)
+                            .font(.system(size: StreamyyySpacing.iconSizeLG, weight: .medium))
+                            .foregroundColor(color)
                     }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
+                    
+                    VStack(spacing: StreamyyySpacing.xs) {
+                        Text(name)
+                            .font(StreamyyyTypography.titleSmall)
+                            .foregroundColor(StreamyyyColors.textPrimary)
+                            .multilineTextAlignment(.center)
+                        
+                        Text("\(formatCount(streamCount)) streams")
+                            .font(StreamyyyTypography.captionMedium)
+                            .foregroundColor(StreamyyyColors.textSecondary)
+                    }
                 }
-                .buttonStyle(PlainButtonStyle())
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal)
         }
-        .sheet(isPresented: $showingAddStream) {
-            AddStreamView()
+        .buttonStyle(.plain)
+        .scaleEffect(isPressed ? 0.95 : 1.0)
+        .animation(.easeInOut(duration: 0.1), value: isPressed)
+        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
+            isPressed = pressing
+        }, perform: {})
+        .accessibilityLabel("\(name) category")
+        .accessibilityHint("\(streamCount) streams available. Tap to browse this category.")
+    }
+    
+    private func formatCount(_ count: Int) -> String {
+        if count >= 1000 {
+            return String(format: "%.1fK", Double(count) / 1000.0)
+        } else {
+            return "\(count)"
         }
     }
 }
@@ -523,7 +902,7 @@ struct FeaturedStream {
     let game: String
     let viewers: Int
     let thumbnailURL: String
-    let platform: StreamType
+    let platform: Platform
     let url: String
 }
 
@@ -533,7 +912,7 @@ struct TrendingStream {
     let game: String
     let viewers: Int
     let category: StreamCategory
-    let platform: StreamType
+    let platform: Platform
     let url: String
 }
 

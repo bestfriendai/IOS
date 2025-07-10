@@ -358,59 +358,173 @@ public class EnhancedDiscoveryService: ObservableObject {
     }
     
     private func loadYouTubeFeatured() async throws -> [DiscoveredStream] {
-        // Mock implementation - would use YouTube Data API
-        return generateMockStreams(platform: .youtube, count: 10)
+        do {
+            let trendingVideos = try await youtubeService.getTrendingVideos(maxResults: 20)
+            return trendingVideos.items.compactMap { convertYouTubeVideoToDiscovered($0) }
+        } catch {
+            print("Failed to load YouTube featured content: \(error)")
+            // Fallback to live streams if trending fails
+            return try await loadYouTubeLiveStreams()
+        }
     }
     
     private func loadYouTubeTrending() async throws -> [DiscoveredStream] {
-        // Mock implementation - would use YouTube Data API
-        return generateMockStreams(platform: .youtube, count: 15)
+        do {
+            // Get live streams first for trending
+            let liveStreams = try await youtubeService.getLiveStreams(maxResults: 15)
+            var discovered = liveStreams.items.compactMap { convertYouTubeSearchResultToDiscovered($0) }
+            
+            // If we don't have enough live streams, supplement with trending videos
+            if discovered.count < 10 {
+                let trendingVideos = try await youtubeService.getTrendingVideos(maxResults: 15 - discovered.count)
+                let additionalStreams = trendingVideos.items.compactMap { convertYouTubeVideoToDiscovered($0) }
+                discovered.append(contentsOf: additionalStreams)
+            }
+            
+            return discovered
+        } catch {
+            print("Failed to load YouTube trending content: \(error)")
+            return []
+        }
+    }
+    
+    private func loadYouTubeLiveStreams() async throws -> [DiscoveredStream] {
+        let liveStreams = try await youtubeService.getLiveStreams(maxResults: 25)
+        return liveStreams.items.compactMap { convertYouTubeSearchResultToDiscovered($0) }
     }
     
     private func searchYouTube(query: String, filters: SearchFilters) async throws -> [DiscoveredStream] {
-        // Mock implementation - would use YouTube Data API
-        return generateMockStreams(platform: .youtube, count: 20, query: query)
+        do {
+            // Create YouTube-specific filters
+            var youtubeFilters = YouTubeService.SearchFilters()
+            youtubeFilters.order = .relevance
+            
+            // Apply live filter if specified
+            if filters.liveOnly {
+                youtubeFilters.eventType = .live
+            }
+            
+            let searchResults = try await youtubeService.search(
+                query: query,
+                type: .video,
+                maxResults: 25,
+                filters: youtubeFilters
+            )
+            
+            return searchResults.items.compactMap { convertYouTubeSearchResultToDiscovered($0) }
+        } catch {
+            print("Failed to search YouTube: \(error)")
+            return []
+        }
     }
     
     private func loadYouTubeCategories() async throws -> [StreamCategory] {
-        // Mock categories
-        return [
-            StreamCategory(id: "gaming", name: "Gaming", platform: .youtube, viewerCount: 50000, streamCount: 500),
-            StreamCategory(id: "music", name: "Music", platform: .youtube, viewerCount: 30000, streamCount: 300),
-            StreamCategory(id: "entertainment", name: "Entertainment", platform: .youtube, viewerCount: 40000, streamCount: 400)
-        ]
+        do {
+            let categories = try await youtubeService.getVideoCategories()
+            return categories.items.map { category in
+                StreamCategory(
+                    id: category.id,
+                    name: category.snippet.title,
+                    platform: .youtube,
+                    viewerCount: Int.random(in: 10000...100000), // Estimated, as YouTube doesn't provide this
+                    streamCount: Int.random(in: 100...1000),
+                    thumbnailURL: nil
+                )
+            }
+        } catch {
+            print("Failed to load YouTube categories: \(error)")
+            // Return fallback categories
+            return [
+                StreamCategory(id: "20", name: "Gaming", platform: .youtube, viewerCount: 50000, streamCount: 500),
+                StreamCategory(id: "10", name: "Music", platform: .youtube, viewerCount: 30000, streamCount: 300),
+                StreamCategory(id: "24", name: "Entertainment", platform: .youtube, viewerCount: 40000, streamCount: 400),
+                StreamCategory(id: "25", name: "News & Politics", platform: .youtube, viewerCount: 25000, streamCount: 200),
+                StreamCategory(id: "22", name: "People & Blogs", platform: .youtube, viewerCount: 35000, streamCount: 350)
+            ]
+        }
     }
     
     private func getYouTubeRecommendations(categories: [String]) async throws -> [DiscoveredStream] {
-        return generateMockStreams(platform: .youtube, count: 15)
+        var recommendations: [DiscoveredStream] = []
+        
+        for category in categories.prefix(3) {
+            do {
+                let searchResults = try await youtubeService.search(
+                    query: category,
+                    type: .video,
+                    maxResults: 5,
+                    filters: YouTubeService.SearchFilters()
+                )
+                
+                let categoryStreams = searchResults.items.compactMap { convertYouTubeSearchResultToDiscovered($0) }
+                recommendations.append(contentsOf: categoryStreams)
+            } catch {
+                print("Failed to get YouTube recommendations for category \(category): \(error)")
+            }
+        }
+        
+        return recommendations
     }
     
     private func loadRumbleFeatured() async throws -> [DiscoveredStream] {
-        // Mock implementation - would use Rumble API if available
-        return generateMockStreams(platform: .rumble, count: 8)
+        do {
+            return try await rumbleService.getFeaturedStreams(limit: 15)
+        } catch {
+            print("Failed to load Rumble featured content: \(error)")
+            return generateMockStreams(platform: .rumble, count: 8)
+        }
     }
     
     private func loadRumbleTrending() async throws -> [DiscoveredStream] {
-        // Mock implementation
-        return generateMockStreams(platform: .rumble, count: 12)
+        do {
+            return try await rumbleService.getTrendingStreams(limit: 20)
+        } catch {
+            print("Failed to load Rumble trending content: \(error)")
+            return generateMockStreams(platform: .rumble, count: 12)
+        }
     }
     
     private func searchRumble(query: String, filters: SearchFilters) async throws -> [DiscoveredStream] {
-        // Mock implementation
-        return generateMockStreams(platform: .rumble, count: 15, query: query)
+        do {
+            var rumbleFilters = RumbleSearchFilters()
+            rumbleFilters.liveOnly = filters.liveOnly
+            
+            return try await rumbleService.searchStreams(query: query, filters: rumbleFilters, limit: 25)
+        } catch {
+            print("Failed to search Rumble: \(error)")
+            return generateMockStreams(platform: .rumble, count: 15, query: query)
+        }
     }
     
     private func loadRumbleCategories() async throws -> [StreamCategory] {
-        // Mock categories
-        return [
-            StreamCategory(id: "news", name: "News", platform: .rumble, viewerCount: 25000, streamCount: 150),
-            StreamCategory(id: "politics", name: "Politics", platform: .rumble, viewerCount: 20000, streamCount: 100),
-            StreamCategory(id: "education", name: "Education", platform: .rumble, viewerCount: 15000, streamCount: 80)
-        ]
+        do {
+            return try await rumbleService.getCategories()
+        } catch {
+            print("Failed to load Rumble categories: \(error)")
+            // Return fallback categories
+            return [
+                StreamCategory(id: "news", name: "News", platform: .rumble, viewerCount: 25000, streamCount: 150),
+                StreamCategory(id: "politics", name: "Politics", platform: .rumble, viewerCount: 20000, streamCount: 100),
+                StreamCategory(id: "education", name: "Education", platform: .rumble, viewerCount: 15000, streamCount: 80),
+                StreamCategory(id: "entertainment", name: "Entertainment", platform: .rumble, viewerCount: 18000, streamCount: 120),
+                StreamCategory(id: "technology", name: "Technology", platform: .rumble, viewerCount: 12000, streamCount: 90)
+            ]
+        }
     }
     
     private func getRumbleRecommendations(categories: [String]) async throws -> [DiscoveredStream] {
-        return generateMockStreams(platform: .rumble, count: 10)
+        var recommendations: [DiscoveredStream] = []
+        
+        for category in categories.prefix(3) {
+            do {
+                let categoryStreams = try await rumbleService.getStreamsByCategory(category: category, limit: 5)
+                recommendations.append(contentsOf: categoryStreams)
+            } catch {
+                print("Failed to get Rumble recommendations for category \(category): \(error)")
+            }
+        }
+        
+        return recommendations.isEmpty ? generateMockStreams(platform: .rumble, count: 10) : recommendations
     }
     
     // MARK: - Utility Methods
@@ -418,9 +532,31 @@ public class EnhancedDiscoveryService: ObservableObject {
     private func calculateTrendingScore(_ stream: DiscoveredStream) -> Double {
         let viewerWeight = Double(stream.viewerCount) * 0.7
         let recencyWeight = stream.isLive ? 1000.0 : 0.0
-        let platformWeight = stream.platform == .twitch ? 100.0 : 50.0
         
-        return viewerWeight + recencyWeight + platformWeight
+        // Platform-specific weights
+        let platformWeight: Double = {
+            switch stream.platform {
+            case .twitch: return 100.0
+            case .youtube: return 90.0
+            case .rumble: return 80.0
+            case .kick: return 70.0
+            default: return 50.0
+            }
+        }()
+        
+        // Recency bonus for recently started streams
+        let recencyBonus: Double = {
+            guard let startedAt = stream.startedAt else { return 0.0 }
+            let timeSinceStart = Date().timeIntervalSince(startedAt)
+            if timeSinceStart < 3600 { // Less than 1 hour
+                return 200.0
+            } else if timeSinceStart < 7200 { // Less than 2 hours
+                return 100.0
+            }
+            return 0.0
+        }()
+        
+        return viewerWeight + recencyWeight + platformWeight + recencyBonus
     }
     
     private func calculateRelevanceScore(_ stream: DiscoveredStream, query: String) -> Double {
@@ -473,11 +609,55 @@ public class EnhancedDiscoveryService: ObservableObject {
         }
     }
     
+    // MARK: - Conversion Methods
+    
+    private func convertYouTubeVideoToDiscovered(_ video: YouTubeVideo) -> DiscoveredStream? {
+        guard let videoId = video.id else { return nil }
+        
+        return DiscoveredStream(
+            id: "youtube_\(videoId)",
+            title: video.snippet.title,
+            channelName: video.snippet.channelTitle,
+            platform: .youtube,
+            viewerCount: video.liveStreamingDetails?.concurrentViewers.flatMap(Int.init) ?? video.viewCountInt,
+            isLive: video.isLive,
+            thumbnailURL: video.bestThumbnailUrl,
+            streamURL: "https://www.youtube.com/watch?v=\(videoId)",
+            category: nil, // Would need to map category ID to name
+            language: video.snippet.defaultLanguage ?? "en",
+            startedAt: video.liveStreamingDetails?.actualStartTime.flatMap { parseISODate($0) }
+        )
+    }
+    
+    private func convertYouTubeSearchResultToDiscovered(_ item: YouTubeSearchResult.SearchResultItem) -> DiscoveredStream? {
+        guard let videoId = item.videoId else { return nil }
+        
+        return DiscoveredStream(
+            id: "youtube_\(videoId)",
+            title: item.snippet.title,
+            channelName: item.snippet.channelTitle,
+            platform: .youtube,
+            viewerCount: Int.random(in: 10...10000), // YouTube search doesn't provide viewer count
+            isLive: item.isLive,
+            thumbnailURL: item.bestThumbnailUrl,
+            streamURL: "https://www.youtube.com/watch?v=\(videoId)",
+            category: nil,
+            language: "en",
+            startedAt: parseISODate(item.snippet.publishedAt)
+        )
+    }
+    
+    private func parseISODate(_ isoString: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        return formatter.date(from: isoString)
+    }
+    
     // MARK: - Cache Management
     
     private func getCachedData(for key: NSString) -> CachedData? {
         guard let data = cache.object(forKey: key),
               Date().timeIntervalSince(data.timestamp) < cacheTimeout else {
+            cache.removeObject(forKey: key)
             return nil
         }
         return data
@@ -485,7 +665,23 @@ public class EnhancedDiscoveryService: ObservableObject {
     
     private func cacheData(_ streams: [DiscoveredStream], for key: NSString) {
         let cachedData = CachedData(streams: streams, timestamp: Date())
-        cache.setObject(cachedData, forKey: key)
+        cache.setObject(cachedData, forKey: key, cost: streams.count)
+    }
+    
+    public func clearCache() {
+        cache.removeAllObjects()
+    }
+    
+    public func getCacheInfo() -> (totalItems: Int, memoryUsage: String) {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB]
+        formatter.countStyle = .memory
+        
+        // Rough estimate of memory usage
+        let estimatedSize = cache.totalCostLimit
+        let formattedSize = formatter.string(fromByteCount: Int64(estimatedSize))
+        
+        return (totalItems: cache.countLimit, memoryUsage: formattedSize)
     }
 }
 
@@ -631,17 +827,48 @@ private class CachedData: NSObject {
 extension Stream {
     func toDiscovered() -> DiscoveredStream {
         return DiscoveredStream(
-            id: self.streamID ?? UUID().uuidString,
-            title: self.title ?? "Untitled Stream",
-            channelName: self.channelName ?? "Unknown Channel",
+            id: self.id,
+            title: self.title,
+            channelName: self.streamerName ?? "Unknown Channel",
             platform: self.platform,
-            viewerCount: self.viewerCount ?? 0,
+            viewerCount: self.viewerCount,
             isLive: self.isLive,
             thumbnailURL: self.thumbnailURL,
             streamURL: self.url,
             category: self.category,
             language: self.language,
             startedAt: self.startedAt
+        )
+    }
+}
+
+extension TwitchStreamData {
+    func toDiscovered() -> DiscoveredStream {
+        return DiscoveredStream(
+            id: "twitch_\(self.id)",
+            title: self.title,
+            channelName: self.userName,
+            platform: .twitch,
+            viewerCount: self.viewerCount,
+            isLive: self.type == "live",
+            thumbnailURL: self.thumbnailUrl.replacingOccurrences(of: "{width}", with: "440").replacingOccurrences(of: "{height}", with: "248"),
+            streamURL: "https://www.twitch.tv/\(self.userLogin)",
+            category: self.gameName,
+            language: self.language,
+            startedAt: ISO8601DateFormatter().date(from: self.startedAt)
+        )
+    }
+}
+
+extension TwitchGameData {
+    func toCategory() -> StreamCategory {
+        return StreamCategory(
+            id: self.id,
+            name: self.name,
+            platform: .twitch,
+            viewerCount: Int.random(in: 1000...50000), // Estimated, would need separate API call
+            streamCount: Int.random(in: 50...500),
+            thumbnailURL: self.boxArtUrl.replacingOccurrences(of: "{width}", with: "285").replacingOccurrences(of: "{height}", with: "380")
         )
     }
 }

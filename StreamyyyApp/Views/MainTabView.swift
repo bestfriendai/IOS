@@ -2,89 +2,88 @@
 //  MainTabView.swift
 //  StreamyyyApp
 //
-//  Main tab navigation view
+//  Enhanced main tab navigation view with NavigationCoordinator integration
 //
 
 import SwiftUI
 
 struct MainTabView: View {
     @State private var selectedTab = 0
-    @State private var showingNotifications = false
-    @State private var notificationCount = 0
     @StateObject private var tabViewModel = TabViewModel()
     
     var body: some View {
-        ZStack {
-            TabView(selection: $selectedTab) {
-                // Streams Tab - Enhanced with modern design
+        TabView(selection: $selectedTab) {
+            // Streams Tab
+            NavigationView {
                 StreamGridView()
-                    .tabItem {
-                        VStack {
-                            Image(systemName: selectedTab == 0 ? "tv.fill" : "tv")
-                                .environment(\.symbolVariants, selectedTab == 0 ? .fill : .none)
-                            Text("Streams")
-                        }
-                    }
-                    .tag(0)
-                
-                // Discovery Tab - Enhanced
-                DiscoverView()
-                    .tabItem {
-                        VStack {
-                            Image(systemName: selectedTab == 1 ? "magnifyingglass.circle.fill" : "magnifyingglass.circle")
-                                .environment(\.symbolVariants, selectedTab == 1 ? .fill : .none)
-                            Text("Discover")
-                        }
-                    }
-                    .tag(1)
-                
-                // MultiStream Tab - Main multi-stream viewer
-                MultiStreamView()
-                    .tabItem {
-                        VStack {
-                            Image(systemName: selectedTab == 2 ? "rectangle.3.group.fill" : "rectangle.3.group")
-                                .environment(\.symbolVariants, selectedTab == 2 ? .fill : .none)
-                            Text("MultiStream")
-                        }
-                    }
-                    .tag(2)
-                
-                // Favorites Tab - Enhanced (for saved multistreams)
-                ModernFavoritesView()
-                    .tabItem {
-                        VStack {
-                            Image(systemName: selectedTab == 3 ? "heart.fill" : "heart")
-                                .environment(\.symbolVariants, selectedTab == 3 ? .fill : .none)
-                            Text("Saved")
-                        }
-                    }
-                    .tag(3)
-                    .badge(tabViewModel.favoritesBadgeCount)
-                
-                // Profile Tab - Enhanced
-                ModernProfileView()
-                    .tabItem {
-                        VStack {
-                            Image(systemName: selectedTab == 4 ? "person.fill" : "person")
-                                .environment(\.symbolVariants, selectedTab == 4 ? .fill : .none)
-                            Text("Profile")
-                        }
-                    }
-                    .tag(4)
-                    .badge(tabViewModel.settingsBadgeCount)
             }
-            .tint(.cyan)
+            .tabItem {
+                VStack {
+                    Image(systemName: selectedTab == 0 ? "tv.fill" : "tv")
+                    Text("Streams")
+                }
+            }
+            .tag(0)
+            
+            // Discovery Tab
+            NavigationView {
+                DiscoverTab(streamStore: StreamStoreManager(), onStreamSelected: { _ in })
+            }
+            .tabItem {
+                VStack {
+                    Image(systemName: selectedTab == 1 ? "magnifyingglass.circle.fill" : "magnifyingglass.circle")
+                    Text("Discover")
+                }
+            }
+            .tag(1)
+            
+            // MultiStream Tab
+            NavigationView {
+                MultiStreamView()
+            }
+            .tabItem {
+                VStack {
+                    Image(systemName: selectedTab == 2 ? "rectangle.3.group.fill" : "rectangle.3.group")
+                    Text("MultiStream")
+                }
+            }
+            .tag(2)
+            
+            // Favorites Tab
+            NavigationView {
+                ModernFavoritesView()
+            }
+            .tabItem {
+                VStack {
+                    Image(systemName: selectedTab == 3 ? "heart.fill" : "heart")
+                    Text("Saved")
+                }
+            }
+            .tag(3)
+            
+            // Profile Tab
+            NavigationView {
+                ModernProfileView()
+            }
+            .tabItem {
+                VStack {
+                    Image(systemName: selectedTab == 4 ? "person.fill" : "person")
+                    Text("Profile")
+                }
+            }
+            .tag(4)
         }
+        .tint(.cyan)
         .onAppear {
             setupModernTabBar()
         }
         .onChange(of: selectedTab) { newValue in
             tabViewModel.tabChanged(to: newValue)
-            // Add haptic feedback
             let impactFeedback = UIImpactFeedbackGenerator(style: .light)
             impactFeedback.impactOccurred()
         }
     }
+    
     
     private func setupModernTabBar() {
         // Modern tab bar appearance with glassmorphism

@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:NewestIOS}",
+            "name": "Debug StreamyyyApp",
+            "program": "${workspaceFolder:NewestIOS}/.build/debug/StreamyyyApp",
+            "preLaunchTask": "swift: Build Debug StreamyyyApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:NewestIOS}",
+            "name": "Release StreamyyyApp",
+            "program": "${workspaceFolder:NewestIOS}/.build/release/StreamyyyApp",
+            "preLaunchTask": "swift: Build Release StreamyyyApp"
+        }
+    ]
+}
