@@ -1,0 +1,44 @@
+{
+  "streams": [
+    {
+      "id": "1",
+      "url": "https://www.twitch.tv/ninja",
+      "title": "Ninja - Fortnite Battle Royale",
+      "type": "twitch",
+      "isLive": true,
+      "viewerCount": 45000,
+      "thumbnailUrl": "https://static-cdn.jtvnw.net/previews-ttv/live_user_ninja-320x180.jpg",
+      "category": "Fortnite"
+    },
+    {
+      "id": "2",
+      "url": "https://www.twitch.tv/shroud",
+      "title": "Shroud - Valorant Gameplay",
+      "type": "twitch",
+      "isLive": true,
+      "viewerCount": 32000,
+      "thumbnailUrl": "https://static-cdn.jtvnw.net/previews-ttv/live_user_shroud-320x180.jpg",
+      "category": "Valorant"
+    },
+    {
+      "id": "3",
+      "url": "https://www.twitch.tv/pokimane",
+      "title": "Pokimane - Just Chatting",
+      "type": "twitch",
+      "isLive": true,
+      "viewerCount": 28000,
+      "thumbnailUrl": "https://static-cdn.jtvnw.net/previews-ttv/live_user_pokimane-320x180.jpg",
+      "category": "Just Chatting"
+    },
+    {
+      "id": "4",
+      "url": "https://www.twitch.tv/xqc",
+      "title": "xQc - Variety Gaming",
+      "type": "twitch",
+      "isLive": true,
+      "viewerCount": 55000,
+      "thumbnailUrl": "https://static-cdn.jtvnw.net/previews-ttv/live_user_xqc-320x180.jpg",
+      "category": "Variety"
+    }
+  ]
+}

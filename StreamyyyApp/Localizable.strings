@@ -1,0 +1,207 @@
+/* App Name */
+"app_name" = "Streamyyy";
+"app_tagline" = "Multi-Stream Experience";
+
+/* Authentication */
+"sign_in" = "Sign In";
+"sign_up" = "Sign Up";
+"sign_out" = "Sign Out";
+"email" = "Email";
+"password" = "Password";
+"full_name" = "Full Name";
+"forgot_password" = "Forgot Password?";
+"create_account" = "Create Account";
+"already_have_account" = "Already have an account?";
+"dont_have_account" = "Don't have an account?";
+"sign_in_with_apple" = "Sign in with Apple";
+"sign_in_with_google" = "Sign in with Google";
+"continue_as_guest" = "Continue as Guest";
+
+/* Streams */
+"streams" = "Streams";
+"add_stream" = "Add Stream";
+"stream_url" = "Stream URL";
+"platform" = "Platform";
+"popular_streams" = "Popular Streams";
+"live" = "LIVE";
+"viewers" = "viewers";
+"offline" = "Offline";
+"loading" = "Loading...";
+"error_loading_stream" = "Error loading stream";
+"retry" = "Retry";
+"no_streams" = "No streams added yet";
+"add_your_first_stream" = "Add your first stream to get started";
+
+/* Discover */
+"discover" = "Discover";
+"search" = "Search";
+"featured" = "Featured";
+"trending" = "Trending";
+"categories" = "Categories";
+"quick_add" = "Quick Add";
+"search_streams" = "Search streams...";
+"all_categories" = "All";
+"gaming" = "Gaming";
+"just_chatting" = "Just Chatting";
+"music" = "Music";
+"art" = "Art";
+"sports" = "Sports";
+"irl" = "IRL";
+
+/* Favorites */
+"favorites" = "Favorites";
+"add_favorite" = "Add Favorite";
+"remove_favorite" = "Remove Favorite";
+"no_favorites" = "No favorites yet";
+"add_streams_to_favorites" = "Add streams to your favorites for quick access";
+"filter_favorites" = "Filter";
+"all" = "All";
+"live_only" = "Live";
+"offline_only" = "Offline";
+
+/* Profile */
+"profile" = "Profile";
+"settings" = "Settings";
+"subscription" = "Subscription";
+"upgrade_to_pro" = "Upgrade to Pro";
+"help_support" = "Help & Support";
+"rate_app" = "Rate App";
+"app_version" = "App Version";
+"free_plan" = "Free Plan";
+"pro_plan" = "Pro Plan";
+"streams_watched" = "Streams Watched";
+"hours_streamed" = "Hours Streamed";
+"favorite_streams" = "Favorite Streams";
+
+/* Settings */
+"notifications" = "Notifications";
+"stream_notifications" = "Stream Notifications";
+"favorite_notifications" = "Favorite Stream Notifications";
+"playback" = "Playback";
+"auto_play" = "Auto Play";
+"quality" = "Quality";
+"auto_quality" = "Auto";
+"high_quality" = "High";
+"medium_quality" = "Medium";
+"low_quality" = "Low";
+"appearance" = "Appearance";
+"theme" = "Theme";
+"system_theme" = "System";
+"light_theme" = "Light";
+"dark_theme" = "Dark";
+"about" = "About";
+"privacy_policy" = "Privacy Policy";
+"terms_of_service" = "Terms of Service";
+"contact_us" = "Contact Us";
+
+/* Subscription */
+"premium_features" = "Premium Features";
+"unlimited_streams" = "Unlimited Streams";
+"hd_quality" = "HD Quality";
+"no_ads" = "No Ads";
+"priority_support" = "Priority Support";
+"advanced_features" = "Advanced Features";
+"monthly" = "Monthly";
+"yearly" = "Yearly";
+"save_percentage" = "Save 20%";
+"free_trial" = "7-day free trial";
+"subscribe_now" = "Subscribe Now";
+"cancel_anytime" = "Cancel anytime";
+"restore_purchases" = "Restore Purchases";
+
+/* Actions */
+"add" = "Add";
+"cancel" = "Cancel";
+"save" = "Save";
+"delete" = "Delete";
+"edit" = "Edit";
+"share" = "Share";
+"copy_link" = "Copy Link";
+"open_in_browser" = "Open in Browser";
+"refresh" = "Refresh";
+"close" = "Close";
+"done" = "Done";
+"continue" = "Continue";
+"back" = "Back";
+"next" = "Next";
+"skip" = "Skip";
+"ok" = "OK";
+
+/* Errors */
+"error" = "Error";
+"network_error" = "Network Error";
+"connection_failed" = "Connection failed. Please check your internet connection.";
+"invalid_url" = "Invalid URL";
+"stream_not_found" = "Stream not found";
+"authentication_failed" = "Authentication failed";
+"subscription_failed" = "Subscription failed";
+"something_went_wrong" = "Something went wrong. Please try again.";
+
+/* Success Messages */
+"stream_added" = "Stream added successfully";
+"stream_removed" = "Stream removed";
+"favorite_added" = "Added to favorites";
+"favorite_removed" = "Removed from favorites";
+"settings_saved" = "Settings saved";
+"subscription_successful" = "Subscription successful";
+"link_copied" = "Link copied to clipboard";
+
+/* Layouts */
+"layout" = "Layout";
+"grid_layout" = "Grid Layout";
+"stack_layout" = "Stack Layout";
+"carousel_layout" = "Carousel Layout";
+"focus_layout" = "Focus Layout";
+"full_screen" = "Full Screen";
+"picture_in_picture" = "Picture in Picture";
+
+/* Stream Controls */
+"mute" = "Mute";
+"unmute" = "Unmute";
+"volume" = "Volume";
+"chat" = "Chat";
+"info" = "Info";
+"stream_info" = "Stream Info";
+"streamer" = "Streamer";
+"category" = "Category";
+"title" = "Title";
+"description" = "Description";
+"tags" = "Tags";
+
+/* Time */
+"now" = "now";
+"minutes_ago" = "minutes ago";
+"hours_ago" = "hours ago";
+"days_ago" = "days ago";
+"started" = "Started";
+"duration" = "Duration";
+
+/* Platforms */
+"twitch" = "Twitch";
+"youtube" = "YouTube";
+"kick" = "Kick";
+"other" = "Other";
+
+/* Permissions */
+"camera_permission" = "Camera access is needed for streaming features.";
+"microphone_permission" = "Microphone access is needed for audio features.";
+"photo_library_permission" = "Photo library access is needed to save screenshots.";
+"notification_permission" = "Enable notifications to get updates about your favorite streams.";
+
+/* Onboarding */
+"welcome" = "Welcome";
+"get_started" = "Get Started";
+"onboarding_title_1" = "Watch Multiple Streams";
+"onboarding_description_1" = "View multiple streams simultaneously with our advanced layout system.";
+"onboarding_title_2" = "Discover New Content";
+"onboarding_description_2" = "Explore trending streams and discover new creators across platforms.";
+"onboarding_title_3" = "Personalize Your Experience";
+"onboarding_description_3" = "Save favorites, customize layouts, and get notifications for your preferred streams.";
+
+/* Empty States */
+"no_results" = "No results found";
+"try_different_search" = "Try a different search term";
+"no_internet" = "No Internet Connection";
+"check_connection" = "Please check your internet connection and try again.";
+"maintenance" = "Under Maintenance";
+"maintenance_message" = "We're currently performing maintenance. Please try again later.";

@@ -1,0 +1,485 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Streamyyy</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchScreenBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchScreenLogo</string>
+	</dict>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIUserInterfaceStyle</key>
+	<string>Automatic</string>
+	
+	<!-- Network and Internet Permissions -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+		<key>NSAllowsArbitraryLoadsForMedia</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>twitch.tv</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<true/>
+			</dict>
+			<key>youtube.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<true/>
+			</dict>
+			<key>kick.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<true/>
+			</dict>
+			<key>discord.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<true/>
+			</dict>
+			<key>facebook.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<true/>
+			</dict>
+			<key>instagram.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<true/>
+			</dict>
+			<key>streamyyy.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<true/>
+			</dict>
+			<key>supabase.co</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<true/>
+			</dict>
+			<key>stripe.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+	
+	<!-- Camera and Microphone Permissions -->
+	<key>NSCameraUsageDescription</key>
+	<string>Streamyyy needs access to your camera to enable streaming features, video calls, and content creation.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Streamyyy needs access to your microphone to enable audio streaming, voice features, and communication.</string>
+	
+	<!-- Photo Library Permissions -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Streamyyy needs access to your photo library to save screenshots, share stream content, and set profile pictures.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Streamyyy needs permission to save screenshots, stream captures, and other content to your photo library.</string>
+	
+	<!-- Location Services -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Streamyyy uses your location to discover nearby streams and provide location-based features.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Streamyyy uses your location to discover nearby streams and provide location-based features.</string>
+	
+	<!-- Motion and Fitness -->
+	<key>NSMotionUsageDescription</key>
+	<string>Streamyyy uses motion data to enhance your streaming experience with gesture controls.</string>
+	
+	<!-- Bluetooth -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Streamyyy uses Bluetooth to connect to wireless headphones and audio devices for better streaming quality.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Streamyyy uses Bluetooth to connect to wireless accessories and streaming equipment.</string>
+	
+	<!-- Speech Recognition -->
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Streamyyy uses speech recognition for voice commands and accessibility features.</string>
+	
+	<!-- Contacts -->
+	<key>NSContactsUsageDescription</key>
+	<string>Streamyyy accesses your contacts to help you find and invite friends to watch streams together.</string>
+	
+	<!-- Calendar -->
+	<key>NSCalendarsUsageDescription</key>
+	<string>Streamyyy can add stream schedules and events to your calendar for better organization.</string>
+	
+	<!-- Reminders -->
+	<key>NSRemindersUsageDescription</key>
+	<string>Streamyyy can create reminders for upcoming streams and events you're interested in.</string>
+	
+	<!-- Face ID / Touch ID -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>Streamyyy uses Face ID for secure authentication and quick access to your account.</string>
+	
+	<!-- Health Kit (Optional) -->
+	<key>NSHealthShareUsageDescription</key>
+	<string>Streamyyy can optionally share health data for wellness-focused streaming content.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Streamyyy can optionally update health data based on your streaming activities.</string>
+	
+	<!-- Local Network -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Streamyyy uses local network access to discover streaming devices and cast content to compatible devices.</string>
+	
+	<!-- HomeKit -->
+	<key>NSHomeKitUsageDescription</key>
+	<string>Streamyyy can control compatible smart home devices to create the perfect streaming environment.</string>
+	
+	<!-- Media Library -->
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Streamyyy can access your music library to enhance your streaming experience with background music.</string>
+	
+	<!-- Siri -->
+	<key>NSSiriUsageDescription</key>
+	<string>Streamyyy integrates with Siri to provide voice control for your streaming experience.</string>
+	
+	<!-- Desktop Folder (macOS) -->
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Streamyyy can access your desktop folder to save stream recordings and screenshots.</string>
+	
+	<!-- Documents Folder (macOS) -->
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Streamyyy can access your documents folder to save and organize stream-related files.</string>
+	
+	<!-- Downloads Folder (macOS) -->
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Streamyyy can access your downloads folder to save stream recordings and content.</string>
+	
+	<!-- Network Volumes (macOS) -->
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>Streamyyy can access network volumes to save and stream content from network storage.</string>
+	
+	<!-- Removable Volumes (macOS) -->
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>Streamyyy can access removable volumes to save stream recordings and backup data.</string>
+	
+	<!-- Notification Permissions -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>background-fetch</string>
+		<string>remote-notification</string>
+		<string>background-processing</string>
+	</array>
+	
+	<!-- URL Schemes for Deep Linking -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.streamyyy.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>streamyyy</string>
+			</array>
+			<key>CFBundleURLIconFile</key>
+			<string>AppIcon</string>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.streamyyy.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>streamyyy-oauth</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.streamyyy.stripe</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>streamyyy-stripe</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.streamyyy.clerk</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>streamyyy-clerk</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.streamyyy.supabase</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>streamyyy-supabase</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.streamyyy.twitch</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>streamyyy</string>
+			</array>
+		</dict>
+	</array>
+	
+	<!-- Queried URL Schemes -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>twitch</string>
+		<string>youtube</string>
+		<string>kick</string>
+		<string>discord</string>
+		<string>twitter</string>
+		<string>instagram</string>
+		<string>facebook</string>
+		<string>fb</string>
+		<string>messenger</string>
+		<string>whatsapp</string>
+		<string>telegram</string>
+		<string>snapchat</string>
+		<string>tiktok</string>
+		<string>linkedin</string>
+		<string>reddit</string>
+		<string>spotify</string>
+		<string>apple-music</string>
+		<string>soundcloud</string>
+		<string>zoom</string>
+		<string>teams</string>
+		<string>facetime</string>
+		<string>mailto</string>
+		<string>tel</string>
+		<string>sms</string>
+		<string>http</string>
+		<string>https</string>
+		<string>ftp</string>
+		<string>sftp</string>
+		<string>webcal</string>
+		<string>calshow</string>
+		<string>prefs</string>
+		<string>app-prefs</string>
+		<string>x-apple-reminder</string>
+		<string>shortcuts</string>
+		<string>workflow</string>
+		<string>x-callback-url</string>
+	</array>
+	
+	<!-- iTunes File Sharing -->
+	<key>UIFileSharingEnabled</key>
+	<false/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
+	
+	<!-- Status Bar Configuration -->
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleDefault</string>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+	
+	<!-- Minimum iOS Version -->
+	<key>MinimumOSVersion</key>
+	<string>15.0</string>
+	
+	<!-- App Icon Configuration -->
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconFiles</key>
+			<array>
+				<string>AppIcon</string>
+			</array>
+			<key>UIPrerenderedIcon</key>
+			<false/>
+		</dict>
+	</dict>
+	
+	<!-- Privacy and Security -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	
+	<!-- Supported Document Types -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Stream URL</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.url</string>
+			</array>
+		</dict>
+	</array>
+	
+	<!-- Accessibility -->
+	<key>UIAccessibilityEnabled</key>
+	<true/>
+	
+	<!-- Haptic Feedback -->
+	<key>UIRequiresFullScreen</key>
+	<false/>
+	
+	<!-- Picture in Picture -->
+	<key>AVPictureInPictureEnabled</key>
+	<true/>
+	
+	<!-- App Store Configuration -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSSupportsAutomaticTermination</key>
+	<true/>
+	<key>NSSupportsSuddenTermination</key>
+	<true/>
+	
+	<!-- Localization -->
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>es</string>
+		<string>fr</string>
+		<string>de</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>zh-Hans</string>
+		<string>zh-Hant</string>
+	</array>
+	
+	<!-- Performance and Memory -->
+	<key>UIApplicationExitsOnSuspend</key>
+	<false/>
+	<key>UIApplicationSupportsShakeToEdit</key>
+	<true/>
+	
+	<!-- Keyboard and Input -->
+	<key>UIKeyboardDismissMode</key>
+	<string>interactive</string>
+	
+	<!-- Scene Configuration -->
+	<key>UISceneDelegate</key>
+	<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+	
+	<!-- Widget Configuration -->
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.widgetkit-extension</string>
+	</dict>
+</dict>
+</plist>
