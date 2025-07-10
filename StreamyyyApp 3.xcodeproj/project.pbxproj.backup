@@ -1,0 +1,999 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		FA123456 /* StreamyyyAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123455 /* StreamyyyAppApp.swift */; };
+		FA123458 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123457 /* ContentView.swift */; };
+		FA12345A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FA123459 /* Assets.xcassets */; };
+		FA12345C /* TwitchAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12345B /* TwitchAPIService.swift */; };
+		FA12345D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12345E /* Config.swift */; };
+		FA12345F /* ContentView 2.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123460 /* ContentView 2.swift */; };
+		FA123461 /* ContentView 3.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123462 /* ContentView 3.swift */; };
+		FA123463 /* AnalyticsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123464 /* AnalyticsManager.swift */; };
+		FA123465 /* ClerkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123466 /* ClerkManager.swift */; };
+		FA123467 /* DesignSystemManagers.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123468 /* DesignSystemManagers.swift */; };
+		FA123469 /* ModernViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12346A /* ModernViews.swift */; };
+		FA12346B /* NetworkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12346C /* NetworkManager.swift */; };
+		FA12346D /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12346E /* NotificationManager.swift */; };
+		FA12346F /* SentryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123470 /* SentryManager.swift */; };
+		FA123471 /* StreamGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123472 /* StreamGridView.swift */; };
+		FA123473 /* StreamPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123474 /* StreamPlayerView.swift */; };
+		FA123475 /* StreamyyyButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123476 /* StreamyyyButton.swift */; };
+		FA123477 /* StreamyyyDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123478 /* StreamyyyDesignSystem.swift */; };
+		FA123479 /* StreamyyyFullDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12347A /* StreamyyyFullDesignSystem.swift */; };
+		FA12347B /* StreamyyyTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12347C /* StreamyyyTextField.swift */; };
+		FA12347D /* StripeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12347E /* StripeManager.swift */; };
+		FA12347F /* TwitchIntegrationTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123480 /* TwitchIntegrationTest.swift */; };
+		
+		/* Components */
+		FA123481 /* EnhancedStreamWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123482 /* EnhancedStreamWebView.swift */; };
+		FA123483 /* MultiPlatformStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123484 /* MultiPlatformStreamView.swift */; };
+		FA123485 /* PictureInPictureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123486 /* PictureInPictureManager.swift */; };
+		FA123487 /* QualityControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123488 /* QualityControlView.swift */; };
+		FA123489 /* SearchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12348A /* SearchBar.swift */; };
+		FA12348B /* StreamWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12348C /* StreamWebView.swift */; };
+		FA12348D /* TwitchChatIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12348E /* TwitchChatIntegration.swift */; };
+		FA12348F /* TwitchEmbedWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123490 /* TwitchEmbedWebView.swift */; };
+		FA123491 /* iPhone16ProOptimizations.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123492 /* iPhone16ProOptimizations.swift */; };
+		
+		/* Models */
+		FA123493 /* ErrorHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123494 /* ErrorHandling.swift */; };
+		FA123495 /* Favorite.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123496 /* Favorite.swift */; };
+		FA123497 /* Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123498 /* Layout.swift */; };
+		FA123499 /* ModelContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12349A /* ModelContainer.swift */; };
+		FA12349B /* ModelIntegrationTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12349C /* ModelIntegrationTest.swift */; };
+		FA12349D /* Notification.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12349E /* Notification.swift */; };
+		FA12349F /* PaymentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234A0 /* PaymentModels.swift */; };
+		FA1234A1 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234A2 /* Platform.swift */; };
+		FA1234A3 /* Stream.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234A4 /* Stream.swift */; };
+		FA1234A5 /* StreamPersistenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234A6 /* StreamPersistenceModels.swift */; };
+		FA1234A7 /* StreamQuality.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234A8 /* StreamQuality.swift */; };
+		FA1234A9 /* Subscription.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234AA /* Subscription.swift */; };
+		FA1234AB /* SyncModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234AC /* SyncModels.swift */; };
+		FA1234AD /* TwitchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234AE /* TwitchModels.swift */; };
+		FA1234AF /* UpdatedManagers.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234B0 /* UpdatedManagers.swift */; };
+		FA1234B1 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234B2 /* User.swift */; };
+		
+		/* Model Extensions */
+		FA1234B3 /* ModelExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234B4 /* ModelExtensions.swift */; };
+		FA1234B5 /* StreamExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234B6 /* StreamExtensions.swift */; };
+		FA1234B7 /* UserExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234B8 /* UserExtensions.swift */; };
+		
+		/* Model Observers */
+		FA1234B9 /* ModelObservers.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234BA /* ModelObservers.swift */; };
+		
+		/* Services */
+		FA1234BB /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234BC /* AudioManager.swift */; };
+		FA1234BD /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234BE /* AuthenticationService.swift */; };
+		FA1234BF /* BatteryOptimizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234C0 /* BatteryOptimizer.swift */; };
+		FA1234C1 /* ErrorHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234C2 /* ErrorHandler.swift */; };
+		FA1234C3 /* ErrorRecoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234C4 /* ErrorRecoveryManager.swift */; };
+		FA1234C5 /* GestureHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234C6 /* GestureHandler.swift */; };
+		FA1234C7 /* LayoutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234C8 /* LayoutManager.swift */; };
+		FA1234C9 /* LayoutPersistenceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234CA /* LayoutPersistenceManager.swift */; };
+		FA1234CB /* LayoutPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234CC /* LayoutPresets.swift */; };
+		FA1234CD /* LayoutSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234CE /* LayoutSyncManager.swift */; };
+		FA1234CF /* MultiStreamLayoutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234D0 /* MultiStreamLayoutManager.swift */; };
+		FA1234D1 /* OfflineModeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234D2 /* OfflineModeService.swift */; };
+		FA1234D3 /* PaymentSecurityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234D4 /* PaymentSecurityManager.swift */; };
+		FA1234D5 /* PerformanceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234D6 /* PerformanceMonitor.swift */; };
+		FA1234D7 /* ProfileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234D8 /* ProfileManager.swift */; };
+		FA1234D9 /* QualityPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234DA /* QualityPresets.swift */; };
+		FA1234DB /* QualityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234DC /* QualityService.swift */; };
+		FA1234DD /* QualityServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234DE /* QualityServiceTests.swift */; };
+		FA1234DF /* StreamAnalyticsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234E0 /* StreamAnalyticsManager.swift */; };
+		FA1234E1 /* StreamBufferManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234E2 /* StreamBufferManager.swift */; };
+		FA1234E3 /* StreamCacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234E4 /* StreamCacheManager.swift */; };
+		FA1234E5 /* StreamHealthDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234E6 /* StreamHealthDiagnostics.swift */; };
+		FA1234E7 /* StreamHealthMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234E8 /* StreamHealthMonitor.swift */; };
+		FA1234E9 /* StreamManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234EA /* StreamManager.swift */; };
+		FA1234EB /* StreamMonitoringService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234EC /* StreamMonitoringService.swift */; };
+		FA1234ED /* StreamSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234EE /* StreamSessionManager.swift */; };
+		FA1234EF /* StreamSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234F0 /* StreamSyncManager.swift */; };
+		FA1234F1 /* StreamSynchronizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234F2 /* StreamSynchronizationManager.swift */; };
+		FA1234F3 /* StreamValidationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234F4 /* StreamValidationService.swift */; };
+		FA1234F5 /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234F6 /* SubscriptionManager.swift */; };
+		FA1234F7 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234F8 /* SupabaseService.swift */; };
+		FA1234F9 /* TwitchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234FA /* TwitchService.swift */; };
+		FA1234FB /* UserFavoritesService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234FC /* UserFavoritesService.swift */; };
+		FA1234FD /* UserStatsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1234FE /* UserStatsManager.swift */; };
+		FA1234FF /* YouTubeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123500 /* YouTubeService.swift */; };
+		FA123501 /* YouTubeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123502 /* YouTubeServiceTests.swift */; };
+		
+		/* Views */
+		FA123503 /* AddStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123504 /* AddStreamView.swift */; };
+		FA123505 /* AuthenticationErrorHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123506 /* AuthenticationErrorHandler.swift */; };
+		FA123507 /* AuthenticationIntegrationTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123508 /* AuthenticationIntegrationTest.swift */; };
+		FA123509 /* AuthenticationLoadingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12350A /* AuthenticationLoadingManager.swift */; };
+		FA12350B /* AuthenticationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12350C /* AuthenticationView.swift */; };
+		FA12350D /* BillingHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12350E /* BillingHistoryView.swift */; };
+		FA12350F /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123510 /* DiscoverView.swift */; };
+		FA123511 /* DragDropLayoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123512 /* DragDropLayoutView.swift */; };
+		FA123513 /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123514 /* FavoritesView.swift */; };
+		FA123515 /* FullScreenStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123516 /* FullScreenStreamView.swift */; };
+		FA123517 /* LayoutCustomizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123518 /* LayoutCustomizationView.swift */; };
+		FA123519 /* LayoutSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12351A /* LayoutSelectorView.swift */; };
+		FA12351B /* LayoutTemplateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12351C /* LayoutTemplateView.swift */; };
+		FA12351D /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12351E /* MainTabView.swift */; };
+		FA12351F /* ModernViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123520 /* ModernViews.swift */; };
+		FA123521 /* MultiStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123522 /* MultiStreamView.swift */; };
+		FA123523 /* OAuthButtonsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123524 /* OAuthButtonsView.swift */; };
+		FA123525 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123526 /* OnboardingView.swift */; };
+		FA123527 /* PasswordResetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123528 /* PasswordResetView.swift */; };
+		FA123529 /* PaymentMethodsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12352A /* PaymentMethodsView.swift */; };
+		FA12352B /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12352C /* PreferencesView.swift */; };
+		FA12352D /* ProfileEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12352E /* ProfileEditView.swift */; };
+		FA12352F /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123530 /* ProfileView.swift */; };
+		FA123531 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123532 /* SettingsView.swift */; };
+		FA123533 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123534 /* SplashView.swift */; };
+		FA123535 /* StreamGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123536 /* StreamGridView.swift */; };
+		FA123537 /* StreamPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123538 /* StreamPlayerView.swift */; };
+		FA123539 /* SubscriptionPlansView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12353A /* SubscriptionPlansView.swift */; };
+		FA12353B /* SubscriptionStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12353C /* SubscriptionStatusView.swift */; };
+		
+		/* DesignSystem */
+		FA12353D /* StreamyyyAccessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12353E /* StreamyyyAccessibility.swift */; };
+		FA12353F /* StreamyyyAnimations.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123540 /* StreamyyyAnimations.swift */; };
+		FA123541 /* StreamyyyColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123542 /* StreamyyyColors.swift */; };
+		FA123543 /* StreamyyyDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123544 /* StreamyyyDesignSystem.swift */; };
+		FA123545 /* StreamyyySpacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123546 /* StreamyyySpacing.swift */; };
+		FA123547 /* StreamyyyTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123548 /* StreamyyyTheme.swift */; };
+		FA123549 /* StreamyyyTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12354A /* StreamyyyTypography.swift */; };
+		
+		/* DesignSystem Components */
+		FA12354B /* StreamyyyButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12354C /* StreamyyyButton.swift */; };
+		FA12354D /* StreamyyyCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12354E /* StreamyyyCard.swift */; };
+		FA12354F /* StreamyyyLayoutComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123550 /* StreamyyyLayoutComponents.swift */; };
+		FA123551 /* StreamyyyOnboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123552 /* StreamyyyOnboarding.swift */; };
+		FA123553 /* StreamyyyStreamPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123554 /* StreamyyyStreamPlayer.swift */; };
+		FA123555 /* StreamyyyTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123556 /* StreamyyyTextField.swift */; };
+		
+		/* StreamEngine */
+		FA123557 /* SharedWebViewProcessPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123558 /* SharedWebViewProcessPool.swift */; };
+		FA123559 /* StreamErrorRecoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12355A /* StreamErrorRecoveryManager.swift */; };
+		FA12355B /* UnifiedStreamPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12355C /* UnifiedStreamPlayerView.swift */; };
+		FA12355D /* StreamStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA12355E /* StreamStateManager.swift */; };
+		FA12355F /* UnifiedStreamWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA123560 /* UnifiedStreamWebView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		FA123452 /* StreamyyyApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StreamyyyApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FA123455 /* StreamyyyAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyAppApp.swift; sourceTree = "<group>"; };
+		FA123457 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		FA123459 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		FA12345B /* TwitchAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchAPIService.swift; sourceTree = "<group>"; };
+		FA12345E /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
+		FA123460 /* ContentView 2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView 2.swift"; sourceTree = "<group>"; };
+		FA123462 /* ContentView 3.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView 3.swift"; sourceTree = "<group>"; };
+		FA123464 /* AnalyticsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsManager.swift; sourceTree = "<group>"; };
+		FA123466 /* ClerkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClerkManager.swift; sourceTree = "<group>"; };
+		FA123468 /* DesignSystemManagers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystemManagers.swift; sourceTree = "<group>"; };
+		FA12346A /* ModernViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernViews.swift; sourceTree = "<group>"; };
+		FA12346C /* NetworkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkManager.swift; sourceTree = "<group>"; };
+		FA12346E /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		FA123470 /* SentryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentryManager.swift; sourceTree = "<group>"; };
+		FA123472 /* StreamGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamGridView.swift; sourceTree = "<group>"; };
+		FA123474 /* StreamPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamPlayerView.swift; sourceTree = "<group>"; };
+		FA123476 /* StreamyyyButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyButton.swift; sourceTree = "<group>"; };
+		FA123478 /* StreamyyyDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyDesignSystem.swift; sourceTree = "<group>"; };
+		FA12347A /* StreamyyyFullDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyFullDesignSystem.swift; sourceTree = "<group>"; };
+		FA12347C /* StreamyyyTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyTextField.swift; sourceTree = "<group>"; };
+		FA12347E /* StripeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StripeManager.swift; sourceTree = "<group>"; };
+		FA123480 /* TwitchIntegrationTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchIntegrationTest.swift; sourceTree = "<group>"; };
+		
+		/* Components */
+		FA123482 /* EnhancedStreamWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnhancedStreamWebView.swift; sourceTree = "<group>"; };
+		FA123484 /* MultiPlatformStreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiPlatformStreamView.swift; sourceTree = "<group>"; };
+		FA123486 /* PictureInPictureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PictureInPictureManager.swift; sourceTree = "<group>"; };
+		FA123488 /* QualityControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityControlView.swift; sourceTree = "<group>"; };
+		FA12348A /* SearchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBar.swift; sourceTree = "<group>"; };
+		FA12348C /* StreamWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamWebView.swift; sourceTree = "<group>"; };
+		FA12348E /* TwitchChatIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchChatIntegration.swift; sourceTree = "<group>"; };
+		FA123490 /* TwitchEmbedWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchEmbedWebView.swift; sourceTree = "<group>"; };
+		FA123492 /* iPhone16ProOptimizations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPhone16ProOptimizations.swift; sourceTree = "<group>"; };
+		
+		/* Models */
+		FA123494 /* ErrorHandling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorHandling.swift; sourceTree = "<group>"; };
+		FA123496 /* Favorite.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Favorite.swift; sourceTree = "<group>"; };
+		FA123498 /* Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Layout.swift; sourceTree = "<group>"; };
+		FA12349A /* ModelContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelContainer.swift; sourceTree = "<group>"; };
+		FA12349C /* ModelIntegrationTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelIntegrationTest.swift; sourceTree = "<group>"; };
+		FA12349E /* Notification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notification.swift; sourceTree = "<group>"; };
+		FA1234A0 /* PaymentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentModels.swift; sourceTree = "<group>"; };
+		FA1234A2 /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
+		FA1234A4 /* Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream.swift; sourceTree = "<group>"; };
+		FA1234A6 /* StreamPersistenceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamPersistenceModels.swift; sourceTree = "<group>"; };
+		FA1234A8 /* StreamQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamQuality.swift; sourceTree = "<group>"; };
+		FA1234AA /* Subscription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Subscription.swift; sourceTree = "<group>"; };
+		FA1234AC /* SyncModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncModels.swift; sourceTree = "<group>"; };
+		FA1234AE /* TwitchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchModels.swift; sourceTree = "<group>"; };
+		FA1234B0 /* UpdatedManagers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatedManagers.swift; sourceTree = "<group>"; };
+		FA1234B2 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
+		
+		/* Model Extensions */
+		FA1234B4 /* ModelExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelExtensions.swift; sourceTree = "<group>"; };
+		FA1234B6 /* StreamExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamExtensions.swift; sourceTree = "<group>"; };
+		FA1234B8 /* UserExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserExtensions.swift; sourceTree = "<group>"; };
+		
+		/* Model Observers */
+		FA1234BA /* ModelObservers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelObservers.swift; sourceTree = "<group>"; };
+		
+		/* Services */
+		FA1234BC /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
+		FA1234BE /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
+		FA1234C0 /* BatteryOptimizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryOptimizer.swift; sourceTree = "<group>"; };
+		FA1234C2 /* ErrorHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorHandler.swift; sourceTree = "<group>"; };
+		FA1234C4 /* ErrorRecoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorRecoveryManager.swift; sourceTree = "<group>"; };
+		FA1234C6 /* GestureHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureHandler.swift; sourceTree = "<group>"; };
+		FA1234C8 /* LayoutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutManager.swift; sourceTree = "<group>"; };
+		FA1234CA /* LayoutPersistenceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutPersistenceManager.swift; sourceTree = "<group>"; };
+		FA1234CC /* LayoutPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutPresets.swift; sourceTree = "<group>"; };
+		FA1234CE /* LayoutSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutSyncManager.swift; sourceTree = "<group>"; };
+		FA1234D0 /* MultiStreamLayoutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiStreamLayoutManager.swift; sourceTree = "<group>"; };
+		FA1234D2 /* OfflineModeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineModeService.swift; sourceTree = "<group>"; };
+		FA1234D4 /* PaymentSecurityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentSecurityManager.swift; sourceTree = "<group>"; };
+		FA1234D6 /* PerformanceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceMonitor.swift; sourceTree = "<group>"; };
+		FA1234D8 /* ProfileManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileManager.swift; sourceTree = "<group>"; };
+		FA1234DA /* QualityPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityPresets.swift; sourceTree = "<group>"; };
+		FA1234DC /* QualityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityService.swift; sourceTree = "<group>"; };
+		FA1234DE /* QualityServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityServiceTests.swift; sourceTree = "<group>"; };
+		FA1234E0 /* StreamAnalyticsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamAnalyticsManager.swift; sourceTree = "<group>"; };
+		FA1234E2 /* StreamBufferManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamBufferManager.swift; sourceTree = "<group>"; };
+		FA1234E4 /* StreamCacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamCacheManager.swift; sourceTree = "<group>"; };
+		FA1234E6 /* StreamHealthDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamHealthDiagnostics.swift; sourceTree = "<group>"; };
+		FA1234E8 /* StreamHealthMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamHealthMonitor.swift; sourceTree = "<group>"; };
+		FA1234EA /* StreamManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamManager.swift; sourceTree = "<group>"; };
+		FA1234EC /* StreamMonitoringService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamMonitoringService.swift; sourceTree = "<group>"; };
+		FA1234EE /* StreamSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamSessionManager.swift; sourceTree = "<group>"; };
+		FA1234F0 /* StreamSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamSyncManager.swift; sourceTree = "<group>"; };
+		FA1234F2 /* StreamSynchronizationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamSynchronizationManager.swift; sourceTree = "<group>"; };
+		FA1234F4 /* StreamValidationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamValidationService.swift; sourceTree = "<group>"; };
+		FA1234F6 /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
+		FA1234F8 /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
+		FA1234FA /* TwitchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchService.swift; sourceTree = "<group>"; };
+		FA1234FC /* UserFavoritesService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserFavoritesService.swift; sourceTree = "<group>"; };
+		FA1234FE /* UserStatsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserStatsManager.swift; sourceTree = "<group>"; };
+		FA123500 /* YouTubeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeService.swift; sourceTree = "<group>"; };
+		FA123502 /* YouTubeServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeServiceTests.swift; sourceTree = "<group>"; };
+		
+		/* Views */
+		FA123504 /* AddStreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddStreamView.swift; sourceTree = "<group>"; };
+		FA123506 /* AuthenticationErrorHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationErrorHandler.swift; sourceTree = "<group>"; };
+		FA123508 /* AuthenticationIntegrationTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationIntegrationTest.swift; sourceTree = "<group>"; };
+		FA12350A /* AuthenticationLoadingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationLoadingManager.swift; sourceTree = "<group>"; };
+		FA12350C /* AuthenticationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationView.swift; sourceTree = "<group>"; };
+		FA12350E /* BillingHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillingHistoryView.swift; sourceTree = "<group>"; };
+		FA123510 /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
+		FA123512 /* DragDropLayoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragDropLayoutView.swift; sourceTree = "<group>"; };
+		FA123514 /* FavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesView.swift; sourceTree = "<group>"; };
+		FA123516 /* FullScreenStreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullScreenStreamView.swift; sourceTree = "<group>"; };
+		FA123518 /* LayoutCustomizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutCustomizationView.swift; sourceTree = "<group>"; };
+		FA12351A /* LayoutSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutSelectorView.swift; sourceTree = "<group>"; };
+		FA12351C /* LayoutTemplateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutTemplateView.swift; sourceTree = "<group>"; };
+		FA12351E /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		FA123520 /* ModernViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernViews.swift; sourceTree = "<group>"; };
+		FA123522 /* MultiStreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiStreamView.swift; sourceTree = "<group>"; };
+		FA123524 /* OAuthButtonsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthButtonsView.swift; sourceTree = "<group>"; };
+		FA123526 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		FA123528 /* PasswordResetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordResetView.swift; sourceTree = "<group>"; };
+		FA12352A /* PaymentMethodsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentMethodsView.swift; sourceTree = "<group>"; };
+		FA12352C /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
+		FA12352E /* ProfileEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEditView.swift; sourceTree = "<group>"; };
+		FA123530 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		FA123532 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		FA123534 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
+		FA123536 /* StreamGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamGridView.swift; sourceTree = "<group>"; };
+		FA123538 /* StreamPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamPlayerView.swift; sourceTree = "<group>"; };
+		FA12353A /* SubscriptionPlansView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionPlansView.swift; sourceTree = "<group>"; };
+		FA12353C /* SubscriptionStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionStatusView.swift; sourceTree = "<group>"; };
+		
+		/* DesignSystem */
+		FA12353E /* StreamyyyAccessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyAccessibility.swift; sourceTree = "<group>"; };
+		FA123540 /* StreamyyyAnimations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyAnimations.swift; sourceTree = "<group>"; };
+		FA123542 /* StreamyyyColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyColors.swift; sourceTree = "<group>"; };
+		FA123544 /* StreamyyyDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyDesignSystem.swift; sourceTree = "<group>"; };
+		FA123546 /* StreamyyySpacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyySpacing.swift; sourceTree = "<group>"; };
+		FA123548 /* StreamyyyTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyTheme.swift; sourceTree = "<group>"; };
+		FA12354A /* StreamyyyTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyTypography.swift; sourceTree = "<group>"; };
+		
+		/* DesignSystem Components */
+		FA12354C /* StreamyyyButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyButton.swift; sourceTree = "<group>"; };
+		FA12354E /* StreamyyyCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyCard.swift; sourceTree = "<group>"; };
+		FA123550 /* StreamyyyLayoutComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyLayoutComponents.swift; sourceTree = "<group>"; };
+		FA123552 /* StreamyyyOnboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyOnboarding.swift; sourceTree = "<group>"; };
+		FA123554 /* StreamyyyStreamPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyStreamPlayer.swift; sourceTree = "<group>"; };
+		FA123556 /* StreamyyyTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamyyyTextField.swift; sourceTree = "<group>"; };
+		
+		/* StreamEngine */
+		FA123558 /* SharedWebViewProcessPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedWebViewProcessPool.swift; sourceTree = "<group>"; };
+		FA12355A /* StreamErrorRecoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamErrorRecoveryManager.swift; sourceTree = "<group>"; };
+		FA12355C /* UnifiedStreamPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedStreamPlayerView.swift; sourceTree = "<group>"; };
+		FA12355E /* StreamStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamStateManager.swift; sourceTree = "<group>"; };
+		FA123560 /* UnifiedStreamWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedStreamWebView.swift; sourceTree = "<group>"; };
+		
+		/* Additional Files */
+		FA123562 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		FA123564 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		FA123566 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = Localizable.strings; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		FA12344F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		FA123449 = {
+			isa = PBXGroup;
+			children = (
+				FA123454 /* StreamyyyApp */,
+				FA123453 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		FA123453 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				FA123452 /* StreamyyyApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		FA123454 /* StreamyyyApp */ = {
+			isa = PBXGroup;
+			children = (
+				FA123455 /* StreamyyyAppApp.swift */,
+				FA123457 /* ContentView.swift */,
+				FA123460 /* ContentView 2.swift */,
+				FA123462 /* ContentView 3.swift */,
+				FA12345E /* Config.swift */,
+				FA123464 /* AnalyticsManager.swift */,
+				FA123466 /* ClerkManager.swift */,
+				FA123468 /* DesignSystemManagers.swift */,
+				FA12346A /* ModernViews.swift */,
+				FA12346C /* NetworkManager.swift */,
+				FA12346E /* NotificationManager.swift */,
+				FA123470 /* SentryManager.swift */,
+				FA123472 /* StreamGridView.swift */,
+				FA123474 /* StreamPlayerView.swift */,
+				FA123476 /* StreamyyyButton.swift */,
+				FA123478 /* StreamyyyDesignSystem.swift */,
+				FA12347A /* StreamyyyFullDesignSystem.swift */,
+				FA12347C /* StreamyyyTextField.swift */,
+				FA12347E /* StripeManager.swift */,
+				FA123480 /* TwitchIntegrationTest.swift */,
+				FA123568 /* Components */,
+				FA123569 /* Models */,
+				FA12356A /* Services */,
+				FA12356B /* Views */,
+				FA12356C /* DesignSystem */,
+				FA12356D /* StreamEngine */,
+				FA123459 /* Assets.xcassets */,
+				FA123562 /* Info.plist */,
+				FA123564 /* LaunchScreen.storyboard */,
+				FA123566 /* Localizable.strings */,
+			);
+			path = StreamyyyApp;
+			sourceTree = "<group>";
+		};
+		FA123568 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				FA123482 /* EnhancedStreamWebView.swift */,
+				FA123484 /* MultiPlatformStreamView.swift */,
+				FA123486 /* PictureInPictureManager.swift */,
+				FA123488 /* QualityControlView.swift */,
+				FA12348A /* SearchBar.swift */,
+				FA12348C /* StreamWebView.swift */,
+				FA12348E /* TwitchChatIntegration.swift */,
+				FA123490 /* TwitchEmbedWebView.swift */,
+				FA123492 /* iPhone16ProOptimizations.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		FA123569 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				FA123494 /* ErrorHandling.swift */,
+				FA123496 /* Favorite.swift */,
+				FA123498 /* Layout.swift */,
+				FA12349A /* ModelContainer.swift */,
+				FA12349C /* ModelIntegrationTest.swift */,
+				FA12349E /* Notification.swift */,
+				FA1234A0 /* PaymentModels.swift */,
+				FA1234A2 /* Platform.swift */,
+				FA1234A4 /* Stream.swift */,
+				FA1234A6 /* StreamPersistenceModels.swift */,
+				FA1234A8 /* StreamQuality.swift */,
+				FA1234AA /* Subscription.swift */,
+				FA1234AC /* SyncModels.swift */,
+				FA1234AE /* TwitchModels.swift */,
+				FA1234B0 /* UpdatedManagers.swift */,
+				FA1234B2 /* User.swift */,
+				FA12356E /* Extensions */,
+				FA12356F /* Observers */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		FA12356E /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				FA1234B4 /* ModelExtensions.swift */,
+				FA1234B6 /* StreamExtensions.swift */,
+				FA1234B8 /* UserExtensions.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+		FA12356F /* Observers */ = {
+			isa = PBXGroup;
+			children = (
+				FA1234BA /* ModelObservers.swift */,
+			);
+			path = Observers;
+			sourceTree = "<group>";
+		};
+		FA12356A /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				FA12345B /* TwitchAPIService.swift */,
+				FA1234BC /* AudioManager.swift */,
+				FA1234BE /* AuthenticationService.swift */,
+				FA1234C0 /* BatteryOptimizer.swift */,
+				FA1234C2 /* ErrorHandler.swift */,
+				FA1234C4 /* ErrorRecoveryManager.swift */,
+				FA1234C6 /* GestureHandler.swift */,
+				FA1234C8 /* LayoutManager.swift */,
+				FA1234CA /* LayoutPersistenceManager.swift */,
+				FA1234CC /* LayoutPresets.swift */,
+				FA1234CE /* LayoutSyncManager.swift */,
+				FA1234D0 /* MultiStreamLayoutManager.swift */,
+				FA1234D2 /* OfflineModeService.swift */,
+				FA1234D4 /* PaymentSecurityManager.swift */,
+				FA1234D6 /* PerformanceMonitor.swift */,
+				FA1234D8 /* ProfileManager.swift */,
+				FA1234DA /* QualityPresets.swift */,
+				FA1234DC /* QualityService.swift */,
+				FA1234DE /* QualityServiceTests.swift */,
+				FA1234E0 /* StreamAnalyticsManager.swift */,
+				FA1234E2 /* StreamBufferManager.swift */,
+				FA1234E4 /* StreamCacheManager.swift */,
+				FA1234E6 /* StreamHealthDiagnostics.swift */,
+				FA1234E8 /* StreamHealthMonitor.swift */,
+				FA1234EA /* StreamManager.swift */,
+				FA1234EC /* StreamMonitoringService.swift */,
+				FA1234EE /* StreamSessionManager.swift */,
+				FA1234F0 /* StreamSyncManager.swift */,
+				FA1234F2 /* StreamSynchronizationManager.swift */,
+				FA1234F4 /* StreamValidationService.swift */,
+				FA1234F6 /* SubscriptionManager.swift */,
+				FA1234F8 /* SupabaseService.swift */,
+				FA1234FA /* TwitchService.swift */,
+				FA1234FC /* UserFavoritesService.swift */,
+				FA1234FE /* UserStatsManager.swift */,
+				FA123500 /* YouTubeService.swift */,
+				FA123502 /* YouTubeServiceTests.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		FA12356B /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				FA123504 /* AddStreamView.swift */,
+				FA123506 /* AuthenticationErrorHandler.swift */,
+				FA123508 /* AuthenticationIntegrationTest.swift */,
+				FA12350A /* AuthenticationLoadingManager.swift */,
+				FA12350C /* AuthenticationView.swift */,
+				FA12350E /* BillingHistoryView.swift */,
+				FA123510 /* DiscoverView.swift */,
+				FA123512 /* DragDropLayoutView.swift */,
+				FA123514 /* FavoritesView.swift */,
+				FA123516 /* FullScreenStreamView.swift */,
+				FA123518 /* LayoutCustomizationView.swift */,
+				FA12351A /* LayoutSelectorView.swift */,
+				FA12351C /* LayoutTemplateView.swift */,
+				FA12351E /* MainTabView.swift */,
+				FA123520 /* ModernViews.swift */,
+				FA123522 /* MultiStreamView.swift */,
+				FA123524 /* OAuthButtonsView.swift */,
+				FA123526 /* OnboardingView.swift */,
+				FA123528 /* PasswordResetView.swift */,
+				FA12352A /* PaymentMethodsView.swift */,
+				FA12352C /* PreferencesView.swift */,
+				FA12352E /* ProfileEditView.swift */,
+				FA123530 /* ProfileView.swift */,
+				FA123532 /* SettingsView.swift */,
+				FA123534 /* SplashView.swift */,
+				FA123536 /* StreamGridView.swift */,
+				FA123538 /* StreamPlayerView.swift */,
+				FA12353A /* SubscriptionPlansView.swift */,
+				FA12353C /* SubscriptionStatusView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		FA12356C /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				FA12353E /* StreamyyyAccessibility.swift */,
+				FA123540 /* StreamyyyAnimations.swift */,
+				FA123542 /* StreamyyyColors.swift */,
+				FA123544 /* StreamyyyDesignSystem.swift */,
+				FA123546 /* StreamyyySpacing.swift */,
+				FA123548 /* StreamyyyTheme.swift */,
+				FA12354A /* StreamyyyTypography.swift */,
+				FA123570 /* Components */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		FA123570 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				FA12354C /* StreamyyyButton.swift */,
+				FA12354E /* StreamyyyCard.swift */,
+				FA123550 /* StreamyyyLayoutComponents.swift */,
+				FA123552 /* StreamyyyOnboarding.swift */,
+				FA123554 /* StreamyyyStreamPlayer.swift */,
+				FA123556 /* StreamyyyTextField.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		FA12356D /* StreamEngine */ = {
+			isa = PBXGroup;
+			children = (
+				FA123571 /* Core */,
+				FA123572 /* State */,
+				FA123573 /* WebView */,
+			);
+			path = StreamEngine;
+			sourceTree = "<group>";
+		};
+		FA123571 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				FA123558 /* SharedWebViewProcessPool.swift */,
+				FA12355A /* StreamErrorRecoveryManager.swift */,
+				FA12355C /* UnifiedStreamPlayerView.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		FA123572 /* State */ = {
+			isa = PBXGroup;
+			children = (
+				FA12355E /* StreamStateManager.swift */,
+			);
+			path = State;
+			sourceTree = "<group>";
+		};
+		FA123573 /* WebView */ = {
+			isa = PBXGroup;
+			children = (
+				FA123560 /* UnifiedStreamWebView.swift */,
+			);
+			path = WebView;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		FA123451 /* StreamyyyApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FA12345D /* Build configuration list for PBXNativeTarget "StreamyyyApp" */;
+			buildPhases = (
+				FA12344E /* Sources */,
+				FA12344F /* Frameworks */,
+				FA123450 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = StreamyyyApp;
+			productName = StreamyyyApp;
+			productReference = FA123452 /* StreamyyyApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		FA12344A /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					FA123451 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = FA12344D /* Build configuration list for PBXProject "StreamyyyApp" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = FA123449;
+			productRefGroup = FA123453 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				FA123451 /* StreamyyyApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		FA123450 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FA12345A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		FA12344E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FA123456 /* StreamyyyAppApp.swift in Sources */,
+				FA123458 /* ContentView.swift in Sources */,
+				FA12345C /* TwitchAPIService.swift in Sources */,
+				FA12345D /* Config.swift in Sources */,
+				FA12345F /* ContentView 2.swift in Sources */,
+				FA123461 /* ContentView 3.swift in Sources */,
+				FA123463 /* AnalyticsManager.swift in Sources */,
+				FA123465 /* ClerkManager.swift in Sources */,
+				FA123467 /* DesignSystemManagers.swift in Sources */,
+				FA123469 /* ModernViews.swift in Sources */,
+				FA12346B /* NetworkManager.swift in Sources */,
+				FA12346D /* NotificationManager.swift in Sources */,
+				FA12346F /* SentryManager.swift in Sources */,
+				FA123471 /* StreamGridView.swift in Sources */,
+				FA123473 /* StreamPlayerView.swift in Sources */,
+				FA123475 /* StreamyyyButton.swift in Sources */,
+				FA123477 /* StreamyyyDesignSystem.swift in Sources */,
+				FA123479 /* StreamyyyFullDesignSystem.swift in Sources */,
+				FA12347B /* StreamyyyTextField.swift in Sources */,
+				FA12347D /* StripeManager.swift in Sources */,
+				FA12347F /* TwitchIntegrationTest.swift in Sources */,
+				FA123481 /* EnhancedStreamWebView.swift in Sources */,
+				FA123483 /* MultiPlatformStreamView.swift in Sources */,
+				FA123485 /* PictureInPictureManager.swift in Sources */,
+				FA123487 /* QualityControlView.swift in Sources */,
+				FA123489 /* SearchBar.swift in Sources */,
+				FA12348B /* StreamWebView.swift in Sources */,
+				FA12348D /* TwitchChatIntegration.swift in Sources */,
+				FA12348F /* TwitchEmbedWebView.swift in Sources */,
+				FA123491 /* iPhone16ProOptimizations.swift in Sources */,
+				FA123493 /* ErrorHandling.swift in Sources */,
+				FA123495 /* Favorite.swift in Sources */,
+				FA123497 /* Layout.swift in Sources */,
+				FA123499 /* ModelContainer.swift in Sources */,
+				FA12349B /* ModelIntegrationTest.swift in Sources */,
+				FA12349D /* Notification.swift in Sources */,
+				FA12349F /* PaymentModels.swift in Sources */,
+				FA1234A1 /* Platform.swift in Sources */,
+				FA1234A3 /* Stream.swift in Sources */,
+				FA1234A5 /* StreamPersistenceModels.swift in Sources */,
+				FA1234A7 /* StreamQuality.swift in Sources */,
+				FA1234A9 /* Subscription.swift in Sources */,
+				FA1234AB /* SyncModels.swift in Sources */,
+				FA1234AD /* TwitchModels.swift in Sources */,
+				FA1234AF /* UpdatedManagers.swift in Sources */,
+				FA1234B1 /* User.swift in Sources */,
+				FA1234B3 /* ModelExtensions.swift in Sources */,
+				FA1234B5 /* StreamExtensions.swift in Sources */,
+				FA1234B7 /* UserExtensions.swift in Sources */,
+				FA1234B9 /* ModelObservers.swift in Sources */,
+				FA1234BB /* AudioManager.swift in Sources */,
+				FA1234BD /* AuthenticationService.swift in Sources */,
+				FA1234BF /* BatteryOptimizer.swift in Sources */,
+				FA1234C1 /* ErrorHandler.swift in Sources */,
+				FA1234C3 /* ErrorRecoveryManager.swift in Sources */,
+				FA1234C5 /* GestureHandler.swift in Sources */,
+				FA1234C7 /* LayoutManager.swift in Sources */,
+				FA1234C9 /* LayoutPersistenceManager.swift in Sources */,
+				FA1234CB /* LayoutPresets.swift in Sources */,
+				FA1234CD /* LayoutSyncManager.swift in Sources */,
+				FA1234CF /* MultiStreamLayoutManager.swift in Sources */,
+				FA1234D1 /* OfflineModeService.swift in Sources */,
+				FA1234D3 /* PaymentSecurityManager.swift in Sources */,
+				FA1234D5 /* PerformanceMonitor.swift in Sources */,
+				FA1234D7 /* ProfileManager.swift in Sources */,
+				FA1234D9 /* QualityPresets.swift in Sources */,
+				FA1234DB /* QualityService.swift in Sources */,
+				FA1234DD /* QualityServiceTests.swift in Sources */,
+				FA1234DF /* StreamAnalyticsManager.swift in Sources */,
+				FA1234E1 /* StreamBufferManager.swift in Sources */,
+				FA1234E3 /* StreamCacheManager.swift in Sources */,
+				FA1234E5 /* StreamHealthDiagnostics.swift in Sources */,
+				FA1234E7 /* StreamHealthMonitor.swift in Sources */,
+				FA1234E9 /* StreamManager.swift in Sources */,
+				FA1234EB /* StreamMonitoringService.swift in Sources */,
+				FA1234ED /* StreamSessionManager.swift in Sources */,
+				FA1234EF /* StreamSyncManager.swift in Sources */,
+				FA1234F1 /* StreamSynchronizationManager.swift in Sources */,
+				FA1234F3 /* StreamValidationService.swift in Sources */,
+				FA1234F5 /* SubscriptionManager.swift in Sources */,
+				FA1234F7 /* SupabaseService.swift in Sources */,
+				FA1234F9 /* TwitchService.swift in Sources */,
+				FA1234FB /* UserFavoritesService.swift in Sources */,
+				FA1234FD /* UserStatsManager.swift in Sources */,
+				FA1234FF /* YouTubeService.swift in Sources */,
+				FA123501 /* YouTubeServiceTests.swift in Sources */,
+				FA123503 /* AddStreamView.swift in Sources */,
+				FA123505 /* AuthenticationErrorHandler.swift in Sources */,
+				FA123507 /* AuthenticationIntegrationTest.swift in Sources */,
+				FA123509 /* AuthenticationLoadingManager.swift in Sources */,
+				FA12350B /* AuthenticationView.swift in Sources */,
+				FA12350D /* BillingHistoryView.swift in Sources */,
+				FA12350F /* DiscoverView.swift in Sources */,
+				FA123511 /* DragDropLayoutView.swift in Sources */,
+				FA123513 /* FavoritesView.swift in Sources */,
+				FA123515 /* FullScreenStreamView.swift in Sources */,
+				FA123517 /* LayoutCustomizationView.swift in Sources */,
+				FA123519 /* LayoutSelectorView.swift in Sources */,
+				FA12351B /* LayoutTemplateView.swift in Sources */,
+				FA12351D /* MainTabView.swift in Sources */,
+				FA12351F /* ModernViews.swift in Sources */,
+				FA123521 /* MultiStreamView.swift in Sources */,
+				FA123523 /* OAuthButtonsView.swift in Sources */,
+				FA123525 /* OnboardingView.swift in Sources */,
+				FA123527 /* PasswordResetView.swift in Sources */,
+				FA123529 /* PaymentMethodsView.swift in Sources */,
+				FA12352B /* PreferencesView.swift in Sources */,
+				FA12352D /* ProfileEditView.swift in Sources */,
+				FA12352F /* ProfileView.swift in Sources */,
+				FA123531 /* SettingsView.swift in Sources */,
+				FA123533 /* SplashView.swift in Sources */,
+				FA123535 /* StreamGridView.swift in Sources */,
+				FA123537 /* StreamPlayerView.swift in Sources */,
+				FA123539 /* SubscriptionPlansView.swift in Sources */,
+				FA12353B /* SubscriptionStatusView.swift in Sources */,
+				FA12353D /* StreamyyyAccessibility.swift in Sources */,
+				FA12353F /* StreamyyyAnimations.swift in Sources */,
+				FA123541 /* StreamyyyColors.swift in Sources */,
+				FA123543 /* StreamyyyDesignSystem.swift in Sources */,
+				FA123545 /* StreamyyySpacing.swift in Sources */,
+				FA123547 /* StreamyyyTheme.swift in Sources */,
+				FA123549 /* StreamyyyTypography.swift in Sources */,
+				FA12354B /* StreamyyyButton.swift in Sources */,
+				FA12354D /* StreamyyyCard.swift in Sources */,
+				FA12354F /* StreamyyyLayoutComponents.swift in Sources */,
+				FA123551 /* StreamyyyOnboarding.swift in Sources */,
+				FA123553 /* StreamyyyStreamPlayer.swift in Sources */,
+				FA123555 /* StreamyyyTextField.swift in Sources */,
+				FA123557 /* SharedWebViewProcessPool.swift in Sources */,
+				FA123559 /* StreamErrorRecoveryManager.swift in Sources */,
+				FA12355B /* UnifiedStreamPlayerView.swift in Sources */,
+				FA12355D /* StreamStateManager.swift in Sources */,
+				FA12355F /* UnifiedStreamWebView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		FA12344B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		FA12344C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		FA12345E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"StreamyyyApp/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.streamyyy.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		FA12345F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"StreamyyyApp/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.streamyyy.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		FA12344D /* Build configuration list for PBXProject "StreamyyyApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FA12344B /* Debug */,
+				FA12344C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FA12345D /* Build configuration list for PBXNativeTarget "StreamyyyApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FA12345E /* Debug */,
+				FA12345F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = FA12344A /* Project object */;
+}

@@ -8,124 +8,21 @@
 import SwiftUI
 import WebKit
 
-struct TwitchEmbedPlayerView: UIViewRepresentable {
+struct TwitchEmbedPlayerView: View {
     let stream: TwitchStream
     let isCompact: Bool
     @Binding var isLoading: Bool
     
-    func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = []
-        
-        // Add script message handler
-        let userContentController = WKUserContentController()
-        userContentController.add(context.coordinator, name: "loadingHandler")
-        config.userContentController = userContentController
-        
-        let webView = WKWebView(frame: .zero, configuration: config)
-        webView.navigationDelegate = context.coordinator
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.bounces = false
-        webView.backgroundColor = UIColor.black
-        webView.isOpaque = false
-        
-        return webView
-    }
-    
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        let embedHTML = createTwitchEmbedHTML()
-        webView.loadHTMLString(embedHTML, baseURL: URL(string: "https://player.twitch.tv"))
-    }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    private func createTwitchEmbedHTML() -> String {
-        let autoplay = "true"
-        let muted = isCompact ? "true" : "false"
-        
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <style>
-                body, html {
-                    margin: 0;
-                    padding: 0;
-                    width: 100%;
-                    height: 100%;
-                    background-color: #000;
-                    overflow: hidden;
-                }
-                iframe {
-                    border: none;
-                    width: 100%;
-                    height: 100%;
-                }
-            </style>
-        </head>
-        <body>
-            <iframe 
-                src="https://player.twitch.tv/?channel=\(stream.userLogin)&parent=player.twitch.tv&autoplay=\(autoplay)&muted=\(muted)"
-                frameborder="0" 
-                allowfullscreen="true" 
-                scrolling="no"
-                allow="autoplay; fullscreen">
-            </iframe>
-            <script type="text/javascript">
-                // Disable context menu
-                document.addEventListener('contextmenu', event => event.preventDefault());
-                
-                // Disable text selection
-                document.onselectstart = function() { return false; }
-                document.onmousedown = function() { return false; }
-                
-                // Handle loading state
-                window.addEventListener('load', function() {
-                    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.loadingHandler) {
-                        window.webkit.messageHandlers.loadingHandler.postMessage('loaded');
-                    }
-                });
-            </script>
-        </body>
-        </html>
-        """
-    }
-    
-    class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-        let parent: TwitchEmbedPlayerView
-        
-        init(_ parent: TwitchEmbedPlayerView) {
-            self.parent = parent
-            super.init()
-        }
-        
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            DispatchQueue.main.async {
-                self.parent.isLoading = false
-            }
-        }
-        
-        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-            DispatchQueue.main.async {
-                self.parent.isLoading = true
-            }
-        }
-        
-        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            if message.name == "loadingHandler" {
-                DispatchQueue.main.async {
-                    self.parent.isLoading = false
-                }
-            }
-        }
+    var body: some View {
+        // This view now uses the new, reliable TwitchEmbedWebView.
+        TwitchEmbedWebView(
+            channelName: stream.userLogin,
+            isMuted: .constant(isCompact)
+        )
     }
 }
 
+// Compact Player View remains for UI structure but uses the new robust player
 struct CompactTwitchPlayerView: View {
     let stream: TwitchStream
     @State private var isLoading = true
@@ -209,6 +106,7 @@ struct CompactTwitchPlayerView: View {
     }
 }
 
+// Fullscreen Player View also uses the new robust player
 struct FullscreenTwitchPlayerView: View {
     let stream: TwitchStream
     let onDismiss: () -> Void
@@ -256,51 +154,6 @@ struct FullscreenTwitchPlayerView: View {
                     }
                     
                     Spacer()
-                    
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(stream.title)
-                                .font(.headline)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .lineLimit(2)
-                            
-                            HStack {
-                                Text(stream.userName)
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.purple)
-                                
-                                Spacer()
-                                
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(Color.red)
-                                        .frame(width: 6, height: 6)
-                                    
-                                    Text("LIVE • \(stream.formattedViewerCount)")
-                                        .font(.caption)
-                                        .foregroundColor(.white)
-                                }
-                            }
-                            
-                            if !stream.gameName.isEmpty {
-                                Text("Playing: \(stream.gameName)")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                        }
-                        
-                        Spacer()
-                    }
-                    .padding()
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [Color.black.opacity(0.8), Color.clear]),
-                            startPoint: .bottom,
-                            endPoint: .top
-                        )
-                    )
                 }
                 .transition(.opacity)
             }

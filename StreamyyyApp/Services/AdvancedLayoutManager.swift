@@ -200,6 +200,29 @@ public class AdvancedLayoutManager: ObservableObject {
         }
     }
     
+    /// Get layout positions for Twitch streams
+    public func getTwitchStreamPositions(
+        for streams: [TwitchStream],
+        in containerSize: CGSize
+    ) -> [TwitchStreamPosition] {
+        switch currentLayout {
+        case .grid(let config):
+            return calculateTwitchGridPositions(streams: streams, config: config, containerSize: containerSize)
+            
+        case .pip(let config):
+            return calculateTwitchPiPPositions(streams: streams, config: config, containerSize: containerSize)
+            
+        case .focus(let config):
+            return calculateTwitchFocusPositions(streams: streams, config: config, containerSize: containerSize)
+            
+        case .mosaic(let config):
+            return calculateTwitchMosaicPositions(streams: streams, config: config, containerSize: containerSize)
+            
+        case .customBento(let config):
+            return calculateTwitchBentoPositions(streams: streams, config: config, containerSize: containerSize)
+        }
+    }
+    
     /// Get animation configuration for layout transition
     public func getAnimationConfiguration() -> Animation? {
         guard configuration.enableAnimations else { return nil }
@@ -558,6 +581,293 @@ extension AdvancedLayoutManager {
         
         return positions
     }
+    
+    // MARK: - Twitch Stream Calculations
+    
+    private func calculateTwitchGridPositions(
+        streams: [TwitchStream],
+        config: GridLayoutConfiguration,
+        containerSize: CGSize
+    ) -> [TwitchStreamPosition] {
+        let columns = min(config.columns, streams.count)
+        let rows = Int(ceil(Double(streams.count) / Double(columns)))
+        
+        let totalHorizontalSpacing = CGFloat(columns - 1) * config.spacing
+        let totalVerticalSpacing = CGFloat(rows - 1) * config.spacing
+        
+        let itemWidth = (containerSize.width - totalHorizontalSpacing) / CGFloat(columns)
+        let itemHeight = itemWidth / config.aspectRatio.ratio
+        
+        var positions: [TwitchStreamPosition] = []
+        
+        for (index, stream) in streams.enumerated() {
+            let column = index % columns
+            let row = index / columns
+            
+            let x = CGFloat(column) * (itemWidth + config.spacing)
+            let y = CGFloat(row) * (itemHeight + config.spacing)
+            
+            positions.append(TwitchStreamPosition(
+                stream: stream,
+                frame: CGRect(x: x, y: y, width: itemWidth, height: itemHeight),
+                zIndex: 0,
+                opacity: 1.0,
+                scale: 1.0,
+                isAudioActive: false,
+                isRecording: false,
+                isComparison: false
+            ))
+        }
+        
+        return positions
+    }
+    
+    private func calculateTwitchPiPPositions(
+        streams: [TwitchStream],
+        config: PiPLayoutConfiguration,
+        containerSize: CGSize
+    ) -> [TwitchStreamPosition] {
+        guard !streams.isEmpty else { return [] }
+        
+        var positions: [TwitchStreamPosition] = []
+        let mainStream = streams[config.mainStreamIndex]
+        
+        // Main stream takes full container
+        positions.append(TwitchStreamPosition(
+            stream: mainStream,
+            frame: CGRect(origin: .zero, size: containerSize),
+            zIndex: 0,
+            opacity: 1.0,
+            scale: 1.0,
+            isAudioActive: true,
+            isRecording: false,
+            isComparison: false
+        ))
+        
+        // Calculate PiP positions for other streams
+        let pipSize = config.size.getSize(for: containerSize)
+        let margin: CGFloat = 16
+        
+        for (index, stream) in streams.enumerated() {
+            guard index != config.mainStreamIndex else { continue }
+            
+            let pipFrame = config.position.getFrame(
+                size: pipSize,
+                containerSize: containerSize,
+                margin: margin,
+                index: index - (index > config.mainStreamIndex ? 1 : 0)
+            )
+            
+            positions.append(TwitchStreamPosition(
+                stream: stream,
+                frame: pipFrame,
+                zIndex: 10 + index,
+                opacity: 1.0,
+                scale: 1.0,
+                isAudioActive: false,
+                isRecording: false,
+                isComparison: false
+            ))
+        }
+        
+        return positions
+    }
+    
+    private func calculateTwitchFocusPositions(
+        streams: [TwitchStream],
+        config: FocusLayoutConfiguration,
+        containerSize: CGSize
+    ) -> [TwitchStreamPosition] {
+        guard !streams.isEmpty else { return [] }
+        
+        var positions: [TwitchStreamPosition] = []
+        let focusedStream = streams[config.focusedStreamIndex]
+        
+        if config.showSecondaryStreams && streams.count > 1 {
+            // Focused stream takes most of the space
+            let secondaryHeight = config.secondaryStreamSize.getHeight(for: containerSize)
+            let focusHeight = containerSize.height - secondaryHeight - 16
+            
+            positions.append(TwitchStreamPosition(
+                stream: focusedStream,
+                frame: CGRect(x: 0, y: 0, width: containerSize.width, height: focusHeight),
+                zIndex: 1,
+                opacity: 1.0,
+                scale: 1.0,
+                isAudioActive: true,
+                isRecording: false,
+                isComparison: false
+            ))
+            
+            // Secondary streams in a horizontal strip
+            let secondaryStreams = streams.enumerated().filter { $0.offset != config.focusedStreamIndex }
+            let secondaryWidth = containerSize.width / CGFloat(secondaryStreams.count)
+            
+            for (index, (_, stream)) in secondaryStreams.enumerated() {
+                let x = CGFloat(index) * secondaryWidth
+                let y = focusHeight + 16
+                
+                positions.append(TwitchStreamPosition(
+                    stream: stream,
+                    frame: CGRect(x: x, y: y, width: secondaryWidth, height: secondaryHeight),
+                    zIndex: 0,
+                    opacity: 0.8,
+                    scale: 1.0,
+                    isAudioActive: false,
+                    isRecording: false,
+                    isComparison: false
+                ))
+            }
+        } else {
+            // Only focused stream
+            positions.append(TwitchStreamPosition(
+                stream: focusedStream,
+                frame: CGRect(origin: .zero, size: containerSize),
+                zIndex: 0,
+                opacity: 1.0,
+                scale: 1.0,
+                isAudioActive: true,
+                isRecording: false,
+                isComparison: false
+            ))
+        }
+        
+        return positions
+    }
+    
+    private func calculateTwitchMosaicPositions(
+        streams: [TwitchStream],
+        config: MosaicLayoutConfiguration,
+        containerSize: CGSize
+    ) -> [TwitchStreamPosition] {
+        switch config.pattern {
+        case .balanced:
+            return calculateTwitchGridPositions(
+                streams: streams,
+                config: GridLayoutConfiguration(columns: 2, spacing: 4),
+                containerSize: containerSize
+            )
+        case .asymmetric:
+            return calculateTwitchAsymmetricPositions(streams: streams, containerSize: containerSize)
+        case .pyramid:
+            return calculateTwitchPyramidPositions(streams: streams, containerSize: containerSize)
+        }
+    }
+    
+    private func calculateTwitchBentoPositions(
+        streams: [TwitchStream],
+        config: BentoLayoutConfiguration,
+        containerSize: CGSize
+    ) -> [TwitchStreamPosition] {
+        var positions: [TwitchStreamPosition] = []
+        
+        for (index, stream) in streams.enumerated() {
+            guard index < config.cells.count else { break }
+            
+            let cell = config.cells[index]
+            let frame = cell.getFrame(in: containerSize, gridSize: config.gridSize)
+            
+            positions.append(TwitchStreamPosition(
+                stream: stream,
+                frame: frame,
+                zIndex: cell.priority,
+                opacity: 1.0,
+                scale: 1.0,
+                isAudioActive: index == 0,
+                isRecording: false,
+                isComparison: false
+            ))
+        }
+        
+        return positions
+    }
+    
+    private func calculateTwitchAsymmetricPositions(
+        streams: [TwitchStream],
+        containerSize: CGSize
+    ) -> [TwitchStreamPosition] {
+        var positions: [TwitchStreamPosition] = []
+        
+        guard !streams.isEmpty else { return positions }
+        
+        // First stream takes 2/3 of width, full height
+        let mainWidth = containerSize.width * 2/3
+        positions.append(TwitchStreamPosition(
+            stream: streams[0],
+            frame: CGRect(x: 0, y: 0, width: mainWidth, height: containerSize.height),
+            zIndex: 0,
+            opacity: 1.0,
+            scale: 1.0,
+            isAudioActive: true,
+            isRecording: false,
+            isComparison: false
+        ))
+        
+        // Remaining streams stack vertically in the remaining 1/3
+        let sideWidth = containerSize.width - mainWidth
+        let sideHeight = containerSize.height / CGFloat(max(1, streams.count - 1))
+        
+        for (index, stream) in streams.dropFirst().enumerated() {
+            let y = CGFloat(index) * sideHeight
+            
+            positions.append(TwitchStreamPosition(
+                stream: stream,
+                frame: CGRect(x: mainWidth, y: y, width: sideWidth, height: sideHeight),
+                zIndex: 0,
+                opacity: 1.0,
+                scale: 1.0,
+                isAudioActive: false,
+                isRecording: false,
+                isComparison: false
+            ))
+        }
+        
+        return positions
+    }
+    
+    private func calculateTwitchPyramidPositions(
+        streams: [TwitchStream],
+        containerSize: CGSize
+    ) -> [TwitchStreamPosition] {
+        var positions: [TwitchStreamPosition] = []
+        
+        guard !streams.isEmpty else { return positions }
+        
+        // Top stream takes full width, 1/2 height
+        let topHeight = containerSize.height / 2
+        positions.append(TwitchStreamPosition(
+            stream: streams[0],
+            frame: CGRect(x: 0, y: 0, width: containerSize.width, height: topHeight),
+            zIndex: 0,
+            opacity: 1.0,
+            scale: 1.0,
+            isAudioActive: true,
+            isRecording: false,
+            isComparison: false
+        ))
+        
+        // Bottom streams split the remaining space
+        let bottomStreams = Array(streams.dropFirst())
+        let bottomWidth = containerSize.width / CGFloat(max(1, bottomStreams.count))
+        let bottomHeight = containerSize.height - topHeight
+        
+        for (index, stream) in bottomStreams.enumerated() {
+            let x = CGFloat(index) * bottomWidth
+            
+            positions.append(TwitchStreamPosition(
+                stream: stream,
+                frame: CGRect(x: x, y: topHeight, width: bottomWidth, height: bottomHeight),
+                zIndex: 0,
+                opacity: 1.0,
+                scale: 1.0,
+                isAudioActive: false,
+                isRecording: false,
+                isComparison: false
+            ))
+        }
+        
+        return positions
+    }
 }
 
 // MARK: - Data Models
@@ -675,6 +985,37 @@ public struct StreamPosition {
         self.zIndex = zIndex
         self.opacity = opacity
         self.scale = scale
+    }
+}
+
+public struct TwitchStreamPosition {
+    public let stream: TwitchStream
+    public let frame: CGRect
+    public let zIndex: Int
+    public let opacity: Double
+    public let scale: Double
+    public let isAudioActive: Bool
+    public let isRecording: Bool
+    public let isComparison: Bool
+    
+    public init(
+        stream: TwitchStream,
+        frame: CGRect,
+        zIndex: Int,
+        opacity: Double,
+        scale: Double,
+        isAudioActive: Bool,
+        isRecording: Bool,
+        isComparison: Bool
+    ) {
+        self.stream = stream
+        self.frame = frame
+        self.zIndex = zIndex
+        self.opacity = opacity
+        self.scale = scale
+        self.isAudioActive = isAudioActive
+        self.isRecording = isRecording
+        self.isComparison = isComparison
     }
 }
 

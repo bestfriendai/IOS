@@ -11,6 +11,8 @@ import WebKit
 struct SimpleTwitchPlayer: UIViewRepresentable {
     let channelName: String
     let isCompact: Bool
+    @StateObject private var streamingService = TwitchStreamingService()
+    @State private var isMuted = false
     
     func makeUIView(context: Context) -> WKWebView {
         let webView = WKWebView()
@@ -22,11 +24,22 @@ struct SimpleTwitchPlayer: UIViewRepresentable {
     }
     
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // Create in-app simulated stream content
-        let html = """
+        // Use the improved streaming service with fallback methods
+        Task {
+            await streamingService.connectWithFallback(channelName: channelName)
+        }
+        
+        // Load basic player HTML while streaming service initializes
+        let html = createBasicPlayerHTML()
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+    
+    private func createBasicPlayerHTML() -> String {
+        return """
         <!DOCTYPE html>
         <html>
         <head>
+            <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
                 body, html {
@@ -35,67 +48,57 @@ struct SimpleTwitchPlayer: UIViewRepresentable {
                     width: 100%;
                     height: 100%;
                     background: #000;
-                    overflow: hidden;
-                    font-family: Arial, sans-serif;
-                }
-                .stream-container {
-                    width: 100%;
-                    height: 100%;
-                    background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1);
-                    background-size: 400% 400%;
-                    animation: gradientShift 6s ease infinite;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    position: relative;
-                }
-                @keyframes gradientShift {
-                    0% { background-position: 0% 50%; }
-                    50% { background-position: 100% 50%; }
-                    100% { background-position: 0% 50%; }
-                }
-                .stream-title {
+                    font-family: Arial, sans-serif;
                     color: white;
+                }
+                .player-container {
                     text-align: center;
-                    font-size: 14px;
-                    font-weight: bold;
-                    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-                    background: rgba(0,0,0,0.3);
-                    padding: 10px;
+                    background: linear-gradient(45deg, #1a1a2e, #16213e);
+                    padding: 20px;
                     border-radius: 8px;
-                    backdrop-filter: blur(10px);
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
                 }
-                .live-indicator {
-                    position: absolute;
-                    top: 8px;
-                    left: 8px;
-                    background: #ff4444;
-                    color: white;
-                    padding: 4px 8px;
-                    border-radius: 12px;
-                    font-size: 10px;
+                .channel-name {
+                    font-size: 18px;
                     font-weight: bold;
-                    animation: pulse 2s infinite;
+                    margin-bottom: 10px;
                 }
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.7; }
+                .status {
+                    font-size: 14px;
+                    opacity: 0.8;
+                    margin-bottom: 20px;
+                }
+                .loading-indicator {
+                    width: 40px;
+                    height: 40px;
+                    border: 3px solid rgba(255,255,255,0.3);
+                    border-top: 3px solid white;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                }
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
                 }
             </style>
         </head>
         <body>
-            <div class="stream-container">
-                <div class="live-indicator">🔴 LIVE</div>
-                <div class="stream-title">
-                    \(channelName)<br>
-                    <small style="opacity: 0.8;">Streaming Now</small>
-                </div>
+            <div class="player-container">
+                <div class="channel-name">\(channelName)</div>
+                <div class="status">Initializing stream...</div>
+                <div class="loading-indicator"></div>
             </div>
         </body>
         </html>
         """
-        
-        webView.loadHTMLString(html, baseURL: nil)
     }
 }
 
@@ -342,12 +345,18 @@ struct SimpleCompactPlayer: View {
     let stream: TwitchStream
     @State private var showingFullscreen = false
     @ObservedObject private var audioManager = MultiStreamAudioManager.shared
+    @StateObject private var streamingService = TwitchStreamingService()
+    @State private var isMuted: Bool = false
     
     var body: some View {
         ZStack {
             Color.black
             
-            InAppStreamPlayerView(stream: stream)
+            // Use the improved streaming service with fallback methods
+            streamingService.createPlayerView(
+                channelName: stream.userLogin,
+                isMuted: $isMuted
+            )
             
             // Enhanced overlay with audio controls
             VStack {
@@ -366,9 +375,8 @@ struct SimpleCompactPlayer: View {
                     // Audio control button
                     Button(action: {
                         audioManager.setActiveAudioStream(stream.id)
-                        updateWebViewAudio()
                     }) {
-                        Image(systemName: audioManager.isStreamAudioActive(stream.id) ? "speaker.2.fill" : "speaker.slash.fill")
+                        Image(systemName: audioManager.isStreamAudioActive(stream.id) ? "speaker.wave.2.fill" : "speaker.slash.fill")
                             .font(.caption)
                             .foregroundColor(audioManager.isStreamAudioActive(stream.id) ? .green : .white)
                             .padding(6)
@@ -429,8 +437,10 @@ struct SimpleCompactPlayer: View {
             NavigationView {
                 ZStack {
                     Color.black
-                    InAppStreamPlayerView(stream: stream)
-                        .scaleEffect(1.2) // Slightly larger for fullscreen
+                    TwitchEmbedWebView(
+                        channelName: stream.userLogin,
+                        isMuted: .constant(false)
+                    )
                 }
                 .navigationTitle(stream.userName)
                 .navigationBarTitleDisplayMode(.inline)

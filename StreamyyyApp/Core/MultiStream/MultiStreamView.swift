@@ -223,17 +223,8 @@ struct StreamSlotView: View {
             Color.gray.opacity(0.2)
             
             if let stream = slot.stream {
-                // Video Player
-                if slot.useWebPlayer {
-                    WorkingStreamWebView(
-                        channelName: stream.userLogin,
-                        isCompact: isCompact
-                    )
-                } else if let player = streamManager.getPlayer(for: stream.id) {
-                    VideoPlayerView(player: player)
-                } else {
-                    LoadingPlayerView(isCompact: isCompact)
-                }
+                // Video Player - Using Test Twitch Player
+                TestTwitchPlayer(channelName: stream.userLogin)
                 
                 // Overlay Controls
                 VStack {
@@ -432,11 +423,9 @@ struct FocusStreamView: View {
             
             VStack {
                 if let stream = streamSlot.stream {
-                    WorkingStreamPlayer(
-                        stream: stream,
-                        streamManager: streamManager,
-                        isCompact: false
-                    )
+                    // Using TestTwitchPlayer for consistency with multi-stream grid
+                    TestTwitchPlayer(channelName: stream.userLogin)
+                        .aspectRatio(16/9, contentMode: .fit)
                 }
             }
             

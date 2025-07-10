@@ -491,4 +491,181 @@ extension AnalyticsManager {
             "context": context
         ])
     }
+    
+    // MARK: - Business Intelligence
+    func trackBusinessMetric(metric: String, value: Double, category: String = "general") {
+        track(name: "business_metric", properties: [
+            "metric_name": metric,
+            "value": value,
+            "category": category
+        ])
+    }
+    
+    func trackRevenue(amount: Double, currency: String = "USD", source: String) {
+        track(name: "revenue", properties: [
+            "amount": amount,
+            "currency": currency,
+            "source": source
+        ])
+    }
+    
+    func trackUserEngagement(action: String, duration: TimeInterval, context: String = "") {
+        track(name: "user_engagement", properties: [
+            "action": action,
+            "duration": duration,
+            "context": context,
+            "engagement_score": calculateEngagementScore(action: action, duration: duration)
+        ])
+    }
+    
+    // MARK: - Stream Quality Metrics
+    func trackStreamQuality(streamId: String, platform: String, quality: String, bufferEvents: Int, latency: Double) {
+        track(name: "stream_quality", properties: [
+            "stream_id": streamId,
+            "platform": platform,
+            "quality": quality,
+            "buffer_events": bufferEvents,
+            "latency": latency
+        ])
+    }
+    
+    func trackStreamLoad(streamId: String, loadTime: TimeInterval, success: Bool) {
+        track(name: "stream_load", properties: [
+            "stream_id": streamId,
+            "load_time": loadTime,
+            "success": success
+        ])
+    }
+    
+    // MARK: - User Journey Tracking
+    func trackUserJourney(step: String, properties: [String: Any] = [:]) {
+        var journeyProperties = properties
+        journeyProperties["journey_step"] = step
+        journeyProperties["timestamp"] = Date().timeIntervalSince1970
+        
+        track(name: "user_journey", properties: journeyProperties)
+    }
+    
+    func trackConversionEvent(event: String, value: Double? = nil, properties: [String: Any] = [:]) {
+        var conversionProperties = properties
+        conversionProperties["conversion_event"] = event
+        if let value = value {
+            conversionProperties["value"] = value
+        }
+        
+        track(name: "conversion", properties: conversionProperties)
+    }
+    
+    // MARK: - Feature Adoption
+    func trackFeatureAdoption(feature: String, adopted: Bool, timeToAdopt: TimeInterval? = nil) {
+        var adoptionProperties: [String: Any] = [
+            "feature_name": feature,
+            "adopted": adopted
+        ]
+        
+        if let timeToAdopt = timeToAdopt {
+            adoptionProperties["time_to_adopt"] = timeToAdopt
+        }
+        
+        track(name: "feature_adoption", properties: adoptionProperties)
+    }
+    
+    // MARK: - Crash and Error Analytics
+    func trackCrash(error: String, stackTrace: String? = nil, context: [String: Any] = [:]) {
+        var crashProperties = context
+        crashProperties["error"] = error
+        if let stackTrace = stackTrace {
+            crashProperties["stack_trace"] = stackTrace
+        }
+        
+        let event = AnalyticsEvent(
+            name: "crash",
+            properties: crashProperties,
+            isCritical: true
+        )
+        
+        track(event)
+    }
+    
+    func trackErrorRecovery(error: String, recoveryMethod: String, success: Bool) {
+        track(name: "error_recovery", properties: [
+            "error": error,
+            "recovery_method": recoveryMethod,
+            "success": success
+        ])
+    }
+    
+    // MARK: - Performance Analytics
+    func trackPerformanceAlert(alert: String, threshold: Double, actualValue: Double, severity: String) {
+        track(name: "performance_alert", properties: [
+            "alert": alert,
+            "threshold": threshold,
+            "actual_value": actualValue,
+            "severity": severity
+        ])
+    }
+    
+    func trackMemoryUsage(usage: Double, warning: Bool = false) {
+        track(name: "memory_usage", properties: [
+            "usage": usage,
+            "warning": warning
+        ])
+    }
+    
+    func trackNetworkRequest(endpoint: String, method: String, statusCode: Int, duration: TimeInterval) {
+        track(name: "network_request", properties: [
+            "endpoint": endpoint,
+            "method": method,
+            "status_code": statusCode,
+            "duration": duration
+        ])
+    }
+    
+    // MARK: - User Behavior Analysis
+    func trackUserBehavior(behavior: String, properties: [String: Any] = [:]) {
+        var behaviorProperties = properties
+        behaviorProperties["behavior"] = behavior
+        behaviorProperties["user_session_duration"] = Date().timeIntervalSince(sessionStartTime)
+        
+        track(name: "user_behavior", properties: behaviorProperties)
+    }
+    
+    func trackUserPreference(preference: String, value: Any, changed: Bool = false) {
+        track(name: "user_preference", properties: [
+            "preference": preference,
+            "value": String(describing: value),
+            "changed": changed
+        ])
+    }
+    
+    func trackContentInteraction(contentId: String, contentType: String, action: String, duration: TimeInterval? = nil) {
+        var properties: [String: Any] = [
+            "content_id": contentId,
+            "content_type": contentType,
+            "action": action
+        ]
+        
+        if let duration = duration {
+            properties["duration"] = duration
+        }
+        
+        track(name: "content_interaction", properties: properties)
+    }
+    
+    // MARK: - Helper Methods
+    private func calculateEngagementScore(action: String, duration: TimeInterval) -> Double {
+        let baseScore = 1.0
+        let durationBonus = min(duration / 60.0, 5.0) // Max 5 points for duration
+        let actionBonus: Double = {
+            switch action {
+            case "view", "scroll": return 1.0
+            case "tap", "click": return 2.0
+            case "share", "favorite": return 3.0
+            case "purchase", "subscribe": return 5.0
+            default: return 1.0
+            }
+        }()
+        
+        return baseScore + durationBonus + actionBonus
+    }
 }
