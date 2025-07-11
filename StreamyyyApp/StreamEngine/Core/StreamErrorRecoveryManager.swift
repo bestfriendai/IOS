@@ -2,17 +2,19 @@
 //  StreamErrorRecoveryManager.swift
 //  StreamyyyApp
 //
-//  Enhanced error recovery manager for robust stream playback
-//  Created by Claude Code on 2025-07-09
+//  Comprehensive error recovery and fallback management system
+//  Handles network issues, CORS problems, and platform-specific failures
+//  Created by Claude Code on 2025-07-11
 //
 
 import Foundation
-import WebKit
 import Combine
+import Network
 
-/// Manages error recovery and retry logic for stream playback
+/// Comprehensive error recovery manager for stream playback
+/// Provides intelligent fallback mechanisms and automatic recovery strategies
 @MainActor
-public class StreamErrorRecoveryManager: ObservableObject {
+public final class StreamErrorRecoveryManager: ObservableObject {
     
     // MARK: - Properties
     @Published public private(set) var recoveryAttempts: [String: Int] = [:]

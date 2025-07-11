@@ -715,6 +715,106 @@ class YouTubeService: ObservableObject {
         return try await makeRequest(endpoint: "videos", parameters: parameters)
     }
     
+    // MARK: - Live Stream Discovery Methods
+    
+    /// Get featured live streams (high viewer count, trending)
+    func getFeaturedLiveStreams(maxResults: Int = 25, regionCode: String = "US") async throws -> YouTubeSearchResult {
+        let cost = 100 // Search operation cost
+        try await checkQuotaAndRateLimit(cost: cost)
+        
+        let parameters = [
+            "part": "snippet",
+            "eventType": "live",
+            "type": "video",
+            "maxResults": String(maxResults),
+            "order": "viewCount",
+            "regionCode": regionCode,
+            "key": apiKey
+        ]
+        
+        return try await makeRequest(endpoint: "search", parameters: parameters)
+    }
+    
+    /// Get trending live streams (recently started with good engagement)
+    func getTrendingLiveStreams(maxResults: Int = 25, regionCode: String = "US") async throws -> YouTubeSearchResult {
+        let cost = 100 // Search operation cost
+        try await checkQuotaAndRateLimit(cost: cost)
+        
+        // Get recent live streams and sort by relevance
+        let parameters = [
+            "part": "snippet",
+            "eventType": "live",
+            "type": "video",
+            "maxResults": String(maxResults),
+            "order": "relevance",
+            "publishedAfter": getRecentTimestamp(), // Last 6 hours
+            "regionCode": regionCode,
+            "key": apiKey
+        ]
+        
+        return try await makeRequest(endpoint: "search", parameters: parameters)
+    }
+    
+    /// Search live streams with specific query
+    func searchLiveStreams(query: String, maxResults: Int = 25, regionCode: String = "US") async throws -> YouTubeSearchResult {
+        let cost = 100 // Search operation cost
+        try await checkQuotaAndRateLimit(cost: cost)
+        
+        let parameters = [
+            "part": "snippet",
+            "q": query,
+            "eventType": "live",
+            "type": "video",
+            "maxResults": String(maxResults),
+            "order": "relevance",
+            "regionCode": regionCode,
+            "key": apiKey
+        ]
+        
+        return try await makeRequest(endpoint: "search", parameters: parameters)
+    }
+    
+    /// Get live streams by category
+    func getLiveStreamsByCategory(categoryId: String, maxResults: Int = 25, regionCode: String = "US") async throws -> YouTubeSearchResult {
+        let cost = 100 // Search operation cost
+        try await checkQuotaAndRateLimit(cost: cost)
+        
+        let parameters = [
+            "part": "snippet",
+            "eventType": "live",
+            "type": "video",
+            "maxResults": String(maxResults),
+            "order": "viewCount",
+            "videoCategoryId": categoryId,
+            "regionCode": regionCode,
+            "key": apiKey
+        ]
+        
+        return try await makeRequest(endpoint: "search", parameters: parameters)
+    }
+    
+    /// Get enhanced video details for live streams (includes real-time data)
+    func getEnhancedVideoDetails(videoIds: [String]) async throws -> YouTubeAPIResponse<YouTubeVideo> {
+        let cost = calculateQuotaCost(for: "videos", parts: ["snippet", "statistics", "liveStreamingDetails", "contentDetails"])
+        try await checkQuotaAndRateLimit(cost: cost)
+        
+        let idsString = videoIds.joined(separator: ",")
+        let parameters = [
+            "part": "snippet,statistics,liveStreamingDetails,contentDetails",
+            "id": idsString,
+            "key": apiKey
+        ]
+        
+        return try await makeRequest(endpoint: "videos", parameters: parameters)
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func getRecentTimestamp() -> String {
+        let sixHoursAgo = Date().addingTimeInterval(-6 * 3600) // 6 hours ago
+        return sixHoursAgo.iso8601String
+    }
+    
     func getVideoCategories(regionCode: String = "US") async throws -> YouTubeAPIResponse<VideoCategory> {
         let cost = 1 // Base cost for categories
         try await checkQuotaAndRateLimit(cost: cost)

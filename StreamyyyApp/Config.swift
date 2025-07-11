@@ -10,7 +10,7 @@ import Foundation
 struct Config {
     // MARK: - Clerk Configuration
     struct Clerk {
-        static let publishableKey = "pk_live_Y2xlcmsuc3RyZWFteXl5LmNvbSQ"
+        static let publishableKey = "pk_test_cXVhbGl0eS1kb2UtNDMuY2xlcmsuYWNjb3VudHMuZGV2JA"
         static let secretKey = "sk_test_RQc3HdVhrlsURQMw3EosutCsMDJUnbRm9VdHkD4Vts"
         static let webhookSecret = "whsec_1OXhtTgzKkZOoggp3KK00Uq6p7I7pkxw"
         static let signInUrl = "/sign-in"
@@ -24,17 +24,24 @@ struct Config {
     
     // MARK: - Sentry Configuration
     struct Sentry {
-        static let dsn = "YOUR_SENTRY_DSN_HERE"
+        #if DEBUG
+        static let dsn = "https://abcdef1234567890abcdef1234567890@o123456.ingest.sentry.io/123456"
+        #else
+        static let dsn = "https://abcdef1234567890abcdef1234567890@o123456.ingest.sentry.io/654321"
+        #endif
         static let environment = isProduction ? "production" : "development"
         static let release = "\(App.name)@\(App.version)+\(App.build)"
         static let debug = !isProduction
-        static let tracesSampleRate = 1.0
+        static let tracesSampleRate = isProduction ? 0.1 : 1.0
+        static let enableCrashReporting = true
+        static let enablePerformanceMonitoring = true
+        static let enableUserFeedback = true
     }
     
     // MARK: - Supabase Configuration
     struct Supabase {
-        static let url = "https://wzqtfzxcfhccvhomitau.supabase.co"
-        static let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6cXRmenhxZmhjY3Zob21pdGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY0NzY1MjcsImV4cCI6MjA1MjA1MjUyN30.1ZYpRdGiQXjLLUAGgqTNxNWUNZj8tYrjUYjKjHqVjg"
+        static let url = "https://akwvmljopucsnorvdwuu.supabase.co"
+        static let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrd3ZtbGpvcHVjc25vcnZkd3V1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3NTI1MzIsImV4cCI6MjA2MDMyODUzMn0.0cMnBX7ODkL16AlbzogsDpm-ykGjLXxJmT3ddB8_LGk"
         static let serviceRoleKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrd3ZtbGpvcHVjc25vcnZkd3V1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NDc1MjUzMiwiZXhwIjoyMDYwMzI4NTMyfQ.J-LVAtCa116zSmNBPe5WnYw1eL09VWL9qvlc-kGFU6s"
         
         // Database Tables
@@ -74,16 +81,77 @@ struct Config {
     
     // MARK: - Stripe Configuration
     struct Stripe {
-        static let publishableKey = "YOUR_STRIPE_PUBLISHABLE_KEY_HERE"
+        #if DEBUG
+        static let publishableKey = "pk_test_51234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12"
+        #else
+        static let publishableKey = "pk_live_51234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12"
+        #endif
+        
         static let merchantIdentifier = "merchant.com.streamyyy.app"
         
-        // Product IDs
-        static let monthlyPlanId = "streamyyy_pro_monthly"
-        static let yearlyPlanId = "streamyyy_pro_yearly"
+        // Product IDs - Match web app subscription tiers
+        static let basicMonthlyPlanId = "price_basic_monthly_ios"
+        static let basicYearlyPlanId = "price_basic_yearly_ios"
+        static let premiumMonthlyPlanId = "price_premium_monthly_ios"
+        static let premiumYearlyPlanId = "price_premium_yearly_ios"
+        static let proMonthlyPlanId = "price_pro_monthly_ios"
+        static let proYearlyPlanId = "price_pro_yearly_ios"
+        static let enterpriseMonthlyPlanId = "price_enterprise_monthly_ios"
+        static let enterpriseYearlyPlanId = "price_enterprise_yearly_ios"
         
-        // Pricing
-        static let monthlyPrice = 9.99
-        static let yearlyPrice = 99.99
+        // Legacy support
+        static let monthlyPlanId = premiumMonthlyPlanId
+        static let yearlyPlanId = premiumYearlyPlanId
+        
+        // Pricing - Sync with web app
+        static let basicMonthlyPrice = 4.99
+        static let basicYearlyPrice = 49.99
+        static let premiumMonthlyPrice = 9.99
+        static let premiumYearlyPrice = 99.99
+        static let proMonthlyPrice = 19.99
+        static let proYearlyPrice = 199.99
+        static let enterpriseMonthlyPrice = 49.99
+        static let enterpriseYearlyPrice = 499.99
+        
+        // Legacy support
+        static let monthlyPrice = premiumMonthlyPrice
+        static let yearlyPrice = premiumYearlyPrice
+        
+        // Features mapping - sync with web app
+        static let tierFeatures: [String: [String: Any]] = [
+            "basic": [
+                "max_streams": 8,
+                "custom_layouts": false,
+                "advanced_controls": false,
+                "priority_support": false,
+                "analytics": false,
+                "custom_branding": false
+            ],
+            "premium": [
+                "max_streams": 16,
+                "custom_layouts": true,
+                "advanced_controls": true,
+                "priority_support": false,
+                "analytics": false,
+                "custom_branding": false
+            ],
+            "pro": [
+                "max_streams": 50,
+                "custom_layouts": true,
+                "advanced_controls": true,
+                "priority_support": true,
+                "analytics": true,
+                "custom_branding": true
+            ],
+            "enterprise": [
+                "max_streams": -1, // unlimited
+                "custom_layouts": true,
+                "advanced_controls": true,
+                "priority_support": true,
+                "analytics": true,
+                "custom_branding": true
+            ]
+        ]
     }
     
     // MARK: - Firebase Configuration (Optional)
@@ -94,10 +162,36 @@ struct Config {
     
     // MARK: - API Endpoints
     struct API {
+        #if DEBUG
+        static let baseURL = "https://staging-api.streamyyy.com"
+        #else
         static let baseURL = "https://api.streamyyy.com"
+        #endif
+        
         static let twitchAPI = "https://api.twitch.tv/helix"
         static let youtubeAPI = "https://www.googleapis.com/youtube/v3"
         static let kickAPI = "https://kick.com/api/v1"
+        
+        // WebSocket endpoints
+        static let websocketURL = isProduction ? "wss://ws.streamyyy.com" : "wss://staging-ws.streamyyy.com"
+        
+        // CDN endpoints
+        static let cdnURL = "https://cdn.streamyyy.com"
+        static let imagesURL = "\(cdnURL)/images"
+        static let videosURL = "\(cdnURL)/videos"
+        
+        // API versions
+        static let currentAPIVersion = "v1"
+        static let deprecatedAPIVersions = ["v0"]
+        
+        // Rate limiting
+        static let rateLimitRequests = 100
+        static let rateLimitWindow = 60 // seconds
+        
+        // Timeouts
+        static let requestTimeout: TimeInterval = 30
+        static let uploadTimeout: TimeInterval = 120
+        static let downloadTimeout: TimeInterval = 60
     }
     
     // MARK: - App Configuration

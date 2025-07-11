@@ -970,6 +970,275 @@ public class TwitchService: ObservableObject {
         return (response.data, response.pagination)
     }
     
+    // MARK: - Discovery and Browse Methods
+    
+    /// Get live streams by category/game
+    public func getStreamsByCategory(
+        gameId: String,
+        first: Int = 20,
+        after: String? = nil,
+        language: String? = nil
+    ) async throws -> (streams: [TwitchStream], pagination: TwitchPagination?) {
+        
+        var parameters = [
+            "game_id": gameId,
+            "first": String(first)
+        ]
+        
+        if let after = after { parameters["after"] = after }
+        if let language = language { parameters["language"] = language }
+        
+        let cacheKey = "streams_by_category_\(gameId)_\(first)_\(after ?? "")_\(language ?? "")"
+        
+        let response: TwitchAPIResponse<TwitchStream> = try await makeAPIRequest(
+            endpoint: "/streams",
+            parameters: parameters,
+            cacheKey: cacheKey,
+            cacheExpiration: 120 // 2 minutes for live data
+        )
+        
+        return (response.data, response.pagination)
+    }
+    
+    /// Search for live streams
+    public func searchLiveStreams(
+        query: String,
+        first: Int = 20,
+        after: String? = nil
+    ) async throws -> (streams: [TwitchStream], pagination: TwitchPagination?) {
+        
+        // First search for channels that match the query
+        let channelResults = try await searchChannels(
+            query: query,
+            liveOnly: true,
+            first: first,
+            after: after
+        )
+        
+        guard !channelResults.channels.isEmpty else {
+            return ([], nil)
+        }
+        
+        // Get user IDs from the channel search
+        let userIds = channelResults.channels.map { $0.id }
+        
+        // Get live streams for those users
+        let response: TwitchAPIResponse<TwitchStream> = try await makeAPIRequest(
+            endpoint: "/streams",
+            parameters: [
+                "user_id": userIds.joined(separator: "&user_id="),
+                "first": String(first)
+            ],
+            cacheKey: "search_live_streams_\(query)_\(first)_\(after ?? "")",
+            cacheExpiration: 120
+        )
+        
+        return (response.data, response.pagination)
+    }
+    
+    /// Get featured streams (top streams with high viewer counts)
+    public func getFeaturedStreams(
+        first: Int = 20,
+        after: String? = nil,
+        language: String? = nil
+    ) async throws -> (streams: [TwitchStream], pagination: TwitchPagination?) {
+        
+        var parameters = [
+            "first": String(first)
+        ]
+        
+        if let after = after { parameters["after"] = after }
+        if let language = language { parameters["language"] = language }
+        
+        let response: TwitchAPIResponse<TwitchStream> = try await makeAPIRequest(
+            endpoint: "/streams",
+            parameters: parameters,
+            cacheKey: "featured_streams_\(first)_\(after ?? "")_\(language ?? "")",
+            cacheExpiration: 180 // 3 minutes
+        )
+        
+        // Filter for featured streams (high viewer count, verified streamers, etc.)
+        let featuredStreams = response.data.filter { stream in
+            stream.viewerCount >= 1000 // Minimum viewer threshold for featured
+        }
+        
+        return (featuredStreams, response.pagination)
+    }
+    
+    /// Get trending streams by analyzing recent growth and engagement
+    public func getTrendingStreams(
+        first: Int = 20,
+        after: String? = nil,
+        timeWindow: TrendingTimeWindow = .hour
+    ) async throws -> [TwitchStream] {
+        
+        // Get top streams and analyze trending patterns
+        let topStreamsResult = try await getTopStreams(first: first * 2, after: after)
+        
+        // For now, return top streams sorted by viewer count
+        // In a real implementation, you'd track viewer count changes over time
+        let trendingStreams = topStreamsResult.streams
+            .sorted { $0.viewerCount > $1.viewerCount }
+            .prefix(first)
+        
+        return Array(trendingStreams)
+    }
+    
+    /// Get streams by multiple games/categories
+    public func getStreamsByMultipleCategories(
+        gameIds: [String],
+        first: Int = 20,
+        after: String? = nil
+    ) async throws -> [TwitchStream] {
+        
+        var allStreams: [TwitchStream] = []
+        let streamsPerCategory = max(first / gameIds.count, 5)
+        
+        // Fetch streams for each category concurrently
+        try await withThrowingTaskGroup(of: [TwitchStream].self) { group in
+            for gameId in gameIds {
+                group.addTask {
+                    let result = try await self.getStreamsByCategory(
+                        gameId: gameId,
+                        first: streamsPerCategory
+                    )
+                    return result.streams
+                }
+            }
+            
+            for try await streams in group {
+                allStreams.append(contentsOf: streams)
+            }
+        }
+        
+        // Remove duplicates and sort by viewer count
+        let uniqueStreams = Array(Set(allStreams.map { $0.id }))
+            .compactMap { id in allStreams.first { $0.id == id } }
+            .sorted { $0.viewerCount > $1.viewerCount }
+            .prefix(first)
+        
+        return Array(uniqueStreams)
+    }
+    
+    /// Get followed streams for authenticated user
+    public func getFollowedStreams(
+        first: Int = 20,
+        after: String? = nil
+    ) async throws -> (streams: [TwitchStream], pagination: TwitchPagination?) {
+        
+        guard isAuthenticated, let user = currentUser else {
+            throw TwitchAPIError.authenticationRequired
+        }
+        
+        // Get followed channels
+        let followedResult = try await getFollowers(userId: user.id, first: 100)
+        let followedUserIds = followedResult.followers.map { $0.userId }
+        
+        guard !followedUserIds.isEmpty else {
+            return ([], nil)
+        }
+        
+        // Get streams for followed users
+        let response: TwitchAPIResponse<TwitchStream> = try await makeAPIRequest(
+            endpoint: "/streams",
+            parameters: [
+                "user_id": followedUserIds.joined(separator: "&user_id="),
+                "first": String(first)
+            ],
+            requiresAuth: true,
+            cacheKey: "followed_streams_\(user.id)_\(first)_\(after ?? "")",
+            cacheExpiration: 60 // 1 minute for followed streams
+        )
+        
+        return (response.data, response.pagination)
+    }
+    
+    /// Get stream recommendations based on viewing history and preferences
+    public func getRecommendedStreams(
+        basedOnCategories: [String] = [],
+        excludeUserIds: [String] = [],
+        first: Int = 20
+    ) async throws -> [TwitchStream] {
+        
+        var allStreams: [TwitchStream] = []
+        
+        if basedOnCategories.isEmpty {
+            // Get top games first, then streams for those games
+            let topGames = try await getTopGames(first: 10)
+            let gameIds = Array(topGames.games.prefix(5).map { $0.id })
+            allStreams = try await getStreamsByMultipleCategories(gameIds: gameIds, first: first)
+        } else {
+            // Get streams from preferred categories
+            allStreams = try await getStreamsByMultipleCategories(gameIds: basedOnCategories, first: first)
+        }
+        
+        // Filter out excluded users
+        let filteredStreams = allStreams.filter { stream in
+            !excludeUserIds.contains(stream.userId)
+        }
+        
+        return Array(filteredStreams.prefix(first))
+    }
+    
+    /// Check if multiple streams are live
+    public func checkStreamStatus(userLogins: [String]) async throws -> [String: Bool] {
+        
+        guard !userLogins.isEmpty else { return [:] }
+        
+        let response: TwitchAPIResponse<TwitchStream> = try await makeAPIRequest(
+            endpoint: "/streams",
+            parameters: [
+                "user_login": userLogins.joined(separator: "&user_login=")
+            ],
+            cacheKey: "stream_status_\(userLogins.joined(separator: "_"))",
+            cacheExpiration: 30 // 30 seconds for status checks
+        )
+        
+        var statusMap: [String: Bool] = [:]
+        
+        // Initialize all as offline
+        for login in userLogins {
+            statusMap[login] = false
+        }
+        
+        // Mark live streams as online
+        for stream in response.data {
+            statusMap[stream.userLogin] = true
+        }
+        
+        return statusMap
+    }
+    
+    /// Get specific streams by their IDs
+    public func getStreamsByIds(_ streamIds: [String]) async throws -> TwitchStreamsResponse {
+        guard !streamIds.isEmpty else {
+            return TwitchStreamsResponse(data: [], pagination: TwitchPagination(cursor: nil))
+        }
+        
+        var queryItems: [URLQueryItem] = []
+        
+        // Add stream IDs (max 100 per request)
+        let limitedIds = Array(streamIds.prefix(100))
+        for streamId in limitedIds {
+            queryItems.append(URLQueryItem(name: "id", value: streamId))
+        }
+        
+        let response: TwitchStreamsResponse = try await makeRequest(
+            endpoint: "streams",
+            queryItems: queryItems
+        )
+        
+        // Filter to only live streams
+        let liveStreams = response.data.filter { $0.type == "live" }
+        
+        print("📊 Retrieved \\(liveStreams.count) live streams from \\(streamIds.count) requested IDs")
+        
+        return TwitchStreamsResponse(
+            data: liveStreams,
+            pagination: response.pagination
+        )
+    }
+    
     // MARK: - Utility Methods
     
     public func formatThumbnailURL(_ url: String, width: Int = 320, height: Int = 180) -> String {
@@ -1007,6 +1276,33 @@ private enum HTTPMethod: String {
     case PUT = "PUT"
     case DELETE = "DELETE"
     case PATCH = "PATCH"
+}
+
+// MARK: - Trending Time Window
+
+public enum TrendingTimeWindow: String, CaseIterable {
+    case hour = "hour"
+    case day = "day"
+    case week = "week"
+    case month = "month"
+    
+    public var displayName: String {
+        switch self {
+        case .hour: return "Past Hour"
+        case .day: return "Past Day"
+        case .week: return "Past Week"
+        case .month: return "Past Month"
+        }
+    }
+    
+    public var timeInterval: TimeInterval {
+        switch self {
+        case .hour: return 3600
+        case .day: return 86400
+        case .week: return 604800
+        case .month: return 2592000
+        }
+    }
 }
 
 // MARK: - Extensions

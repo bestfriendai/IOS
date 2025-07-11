@@ -32,7 +32,7 @@ public class StripeService: NSObject, ObservableObject {
     @Published public var isApplePayAvailable = false
     
     // MARK: - Private Properties
-    private let networking = StripeNetworking()
+    private let networking = StripeNetworkingService.shared
     private var cancellables = Set<AnyCancellable>()
     private var webhookEndpoint: String?
     private var ephemeralKey: String?

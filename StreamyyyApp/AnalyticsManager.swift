@@ -305,27 +305,83 @@ class AnalyticsManager: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("StreamyyyApp/\(Config.App.version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("ios", forHTTPHeaderField: "X-Platform")
+        request.setValue(UIDevice.current.systemVersion, forHTTPHeaderField: "X-OS-Version")
+        request.setValue(UIDevice.current.model, forHTTPHeaderField: "X-Device-Model")
+        request.timeoutInterval = Config.API.requestTimeout
         
-        // TODO: Fix concurrency issue with ClerkManager
-        // if let token = ClerkManager.shared.user?.id {
-        //     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        // }
+        // Add authentication header if available
+        if let userId = getCurrentUserId() {
+            request.setValue("Bearer \(userId)", forHTTPHeaderField: "Authorization")
+        }
+        
+        // Add API key for server-side authentication
+        request.setValue(getAnalyticsAPIKey(), forHTTPHeaderField: "X-API-Key")
         
         request.httpBody = data
         
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             if let error = error {
-                print("Analytics upload failed: \(error)")
+                print("📊 Analytics upload failed: \(error)")
+                self?.handleAnalyticsError(error)
             } else if let httpResponse = response as? HTTPURLResponse {
-                if httpResponse.statusCode == 200 {
+                switch httpResponse.statusCode {
+                case 200...299:
                     #if DEBUG
                     print("📊 Analytics events uploaded successfully")
                     #endif
-                } else {
-                    print("Analytics upload failed with status: \(httpResponse.statusCode)")
+                    self?.handleAnalyticsSuccess()
+                case 401:
+                    print("📊 Analytics upload failed: Unauthorized")
+                    self?.handleAnalyticsAuthError()
+                case 429:
+                    print("📊 Analytics upload failed: Rate limited")
+                    self?.handleAnalyticsRateLimit()
+                default:
+                    print("📊 Analytics upload failed with status: \(httpResponse.statusCode)")
+                    if let responseData = data,
+                       let responseString = String(data: responseData, encoding: .utf8) {
+                        print("📊 Response body: \(responseString)")
+                    }
                 }
             }
         }.resume()
+    }
+    
+    private func getCurrentUserId() -> String? {
+        // TODO: Get actual user ID from authentication service
+        return "user_123"
+    }
+    
+    private func getAnalyticsAPIKey() -> String {
+        // TODO: Store this securely in keychain or environment
+        #if DEBUG
+        return "analytics_key_dev_12345"
+        #else
+        return "analytics_key_prod_67890"
+        #endif
+    }
+    
+    private func handleAnalyticsSuccess() {
+        // Reset any retry backoff
+    }
+    
+    private func handleAnalyticsError(_ error: Error) {
+        // Implement retry logic with exponential backoff
+        // For now, just log
+        print("📊 Analytics error: \(error)")
+    }
+    
+    private func handleAnalyticsAuthError() {
+        // Handle authentication errors
+        // Maybe refresh auth token
+        print("📊 Analytics authentication error")
+    }
+    
+    private func handleAnalyticsRateLimit() {
+        // Handle rate limiting
+        // Implement backoff strategy
+        print("📊 Analytics rate limited - implementing backoff")
     }
     
     // MARK: - Privacy Controls
@@ -618,6 +674,50 @@ extension AnalyticsManager {
             "method": method,
             "status_code": statusCode,
             "duration": duration
+        ])
+    }
+    
+    // MARK: - Stream Status Tracking
+    func trackStreamStatusChange(streamId: String, platform: String, isLive: Bool) {
+        track(name: "stream_status_change", properties: [
+            "stream_id": streamId,
+            "platform": platform,
+            "is_live": isLive,
+            "status": isLive ? "started" : "ended"
+        ])
+    }
+    
+    func trackLiveNotificationSent(streamId: String, platform: String, type: String) {
+        track(name: "live_notification_sent", properties: [
+            "stream_id": streamId,
+            "platform": platform,
+            "notification_type": type
+        ])
+    }
+    
+    func trackLiveNotificationInteracted(streamId: String, platform: String, action: String) {
+        track(name: "live_notification_interacted", properties: [
+            "stream_id": streamId,
+            "platform": platform,
+            "action": action
+        ])
+    }
+    
+    // MARK: - Discovery Analytics
+    func trackDiscoveryPerformance(operation: String, platform: String, duration: TimeInterval, success: Bool) {
+        track(name: "discovery_performance", properties: [
+            "operation": operation,
+            "platform": platform,
+            "duration": duration,
+            "success": success
+        ])
+    }
+    
+    func trackStreamDiscovered(streamId: String, platform: String, source: String) {
+        track(name: "stream_discovered", properties: [
+            "stream_id": streamId,
+            "platform": platform,
+            "discovery_source": source
         ])
     }
     

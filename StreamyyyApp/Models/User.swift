@@ -10,23 +10,7 @@ import SwiftUI
 import SwiftData
 // import ClerkSDK // Commented out until SDK is properly integrated
 
-// Mock ClerkUser structure
-struct ClerkUser {
-    let id: String
-    let firstName: String?
-    let lastName: String?
-    let imageURL: URL?
-    let primaryEmailAddress: EmailAddress?
-    let primaryPhoneNumber: PhoneNumber?
-    
-    struct EmailAddress {
-        let emailAddress: String
-    }
-    
-    struct PhoneNumber {
-        let phoneNumber: String
-    }
-}
+// ClerkUser is defined in ClerkManager.swift
 
 // MARK: - User Model
 @Model
@@ -281,10 +265,12 @@ extension User {
         email = clerkUser.primaryEmailAddress?.emailAddress ?? email
         firstName = clerkUser.firstName
         lastName = clerkUser.lastName
-        profileImageURL = clerkUser.imageURL
-        isEmailVerified = clerkUser.primaryEmailAddress?.verification.status == .verified
+        if let imageURL = clerkUser.imageURL {
+            profileImageURL = imageURL.absoluteString
+        }
+        isEmailVerified = clerkUser.isEmailVerified
         phoneNumber = clerkUser.primaryPhoneNumber?.phoneNumber
-        isPhoneVerified = clerkUser.primaryPhoneNumber?.verification.status == .verified
+        isPhoneVerified = clerkUser.isPhoneVerified
         updatedAt = Date()
     }
     

@@ -2,7 +2,7 @@
 //  AuthenticationService.swift
 //  StreamyyyApp
 //
-//  OAuth authentication service for Twitch and YouTube
+//  Updated authentication service that integrates with ClerkManager
 //
 
 import Foundation
@@ -16,24 +16,26 @@ class AuthenticationService: NSObject, ObservableObject {
     
     // MARK: - Published Properties
     @Published var isAuthenticated = false
-    @Published var currentUser: AuthenticatedUser?
+    @Published var currentUser: UserProfile?
     @Published var authenticationError: AuthenticationError?
     @Published var isLoading = false
+    @Published var lastError: Error?
     
     // Platform-specific authentication status
     @Published var twitchAuthStatus: PlatformAuthStatus = .notAuthenticated
     @Published var youtubeAuthStatus: PlatformAuthStatus = .notAuthenticated
     
     // MARK: - Private Properties
+    private let clerkManager = ClerkManager.shared
+    private let supabaseService = SupabaseService.shared
     private let twitchService = TwitchService.shared
     private let youtubeService = YouTubeService()
     private let networkManager = NetworkManager.shared
-    private let cacheManager = CacheManager.shared
     
     private var cancellables = Set<AnyCancellable>()
     private var currentAuthSession: ASWebAuthenticationSession?
     
-    // OAuth Configuration
+    // OAuth Configuration for platforms
     private let twitchConfig = OAuthConfig(
         clientId: Config.Twitch.clientId,
         clientSecret: Config.Twitch.clientSecret,
@@ -54,18 +56,97 @@ class AuthenticationService: NSObject, ObservableObject {
     
     private override init() {
         super.init()
-        loadStoredAuthentication()
         setupAuthenticationObservers()
     }
     
-    // MARK: - Public Methods
+    // MARK: - Setup and Observers
+    
+    private func setupAuthenticationObservers() {
+        // Observe ClerkManager authentication state
+        clerkManager.$isAuthenticated
+            .assign(to: &$isAuthenticated)
+        
+        clerkManager.$isLoading
+            .assign(to: &$isLoading)
+        
+        clerkManager.$error
+            .assign(to: &$authenticationError)
+        
+        // Observe Supabase profile changes
+        supabaseService.$currentProfile
+            .assign(to: &$currentUser)
+        
+        // Monitor network connectivity
+        networkManager.$isConnected
+            .dropFirst()
+            .sink { [weak self] isConnected in
+                if !isConnected {
+                    self?.lastError = NSError(domain: "NetworkError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Network connection lost"])
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    // MARK: - Core Authentication Methods (delegate to ClerkManager)
+    
+    func signIn(email: String, password: String) async throws {
+        try await clerkManager.signIn(email: email, password: password)
+    }
+    
+    func signUp(email: String, password: String, firstName: String, lastName: String) async throws {
+        try await clerkManager.signUp(email: email, password: password, firstName: firstName, lastName: lastName)
+    }
+    
+    func signOut() async {
+        await clerkManager.signOut()
+        
+        // Clear platform authentications
+        twitchAuthStatus = .notAuthenticated
+        youtubeAuthStatus = .notAuthenticated
+        
+        // Clear platform tokens
+        try? KeychainManager.shared.deleteToken(type: .twitchAccessToken)
+        try? KeychainManager.shared.deleteToken(type: .twitchRefreshToken)
+        try? KeychainManager.shared.deleteToken(type: .youtubeAccessToken)
+        try? KeychainManager.shared.deleteToken(type: .youtubeRefreshToken)
+        
+        // Clear service authentications
+        twitchService.logout()
+    }
+    
+    func refreshAuthentication() async {
+        do {
+            try await clerkManager.refreshSession()
+        } catch {
+            lastError = error
+        }
+    }
+    
+    // MARK: - OAuth Authentication (Apple, Google, GitHub)
+    
+    func signInWithApple() async throws {
+        try await clerkManager.signInWithApple()
+    }
+    
+    func signInWithGoogle() async throws {
+        try await clerkManager.signInWithGoogle()
+    }
+    
+    func signInWithGitHub() async throws {
+        try await clerkManager.signInWithGitHub()
+    }
+    
+    // MARK: - Platform OAuth (Twitch, YouTube)
     
     func authenticateWithTwitch() async throws {
         guard networkManager.isConnected else {
             throw AuthenticationError.networkError
         }
         
-        isLoading = true
+        guard isAuthenticated else {
+            throw AuthenticationError.notAuthenticated
+        }
+        
         twitchAuthStatus = .authenticating
         
         do {
@@ -75,8 +156,6 @@ class AuthenticationService: NSObject, ObservableObject {
             twitchAuthStatus = .error(error)
             throw error
         }
-        
-        isLoading = false
     }
     
     func authenticateWithYouTube() async throws {
@@ -84,7 +163,10 @@ class AuthenticationService: NSObject, ObservableObject {
             throw AuthenticationError.networkError
         }
         
-        isLoading = true
+        guard isAuthenticated else {
+            throw AuthenticationError.notAuthenticated
+        }
+        
         youtubeAuthStatus = .authenticating
         
         do {
@@ -94,78 +176,28 @@ class AuthenticationService: NSObject, ObservableObject {
             youtubeAuthStatus = .error(error)
             throw error
         }
-        
-        isLoading = false
-    }
-    
-    func signOut() async {
-        // Clear tokens and user data
-        currentUser = nil
-        isAuthenticated = false
-        twitchAuthStatus = .notAuthenticated
-        youtubeAuthStatus = .notAuthenticated
-        
-        // Clear stored credentials
-        clearStoredCredentials()
-        
-        // Clear service authentications
-        twitchService.logout()
-        
-        // Clear cached data
-        cacheManager.clearAll()
-    }
-    
-    func refreshAuthentication() async {
-        guard let user = currentUser else { return }
-        
-        do {
-            // Refresh platform tokens
-            if user.twitchAuth != nil {
-                try await refreshTwitchToken()
-            }
-            
-            if user.youtubeAuth != nil {
-                try await refreshYouTubeToken()
-            }
-            
-            // Update user data
-            await updateUserData()
-            
-        } catch {
-            authenticationError = AuthenticationError.tokenRefreshFailed
-        }
     }
     
     // MARK: - Private Methods
     
-    private func loadStoredAuthentication() {
-        // Load stored authentication data
-        if let userData = UserDefaults.standard.data(forKey: "authenticated_user"),
-           let user = try? JSONDecoder().decode(AuthenticatedUser.self, from: userData) {
-            currentUser = user
-            isAuthenticated = true
-            
-            // Update platform statuses
-            twitchAuthStatus = user.twitchAuth != nil ? .authenticated : .notAuthenticated
-            youtubeAuthStatus = user.youtubeAuth != nil ? .authenticated : .notAuthenticated
-            
-            // Validate tokens
-            Task {
-                await validateStoredTokens()
-            }
+    private func checkStoredPlatformTokens() {
+        // Check for stored platform tokens
+        let keychainManager = KeychainManager.shared
+        
+        // Check Twitch tokens
+        if keychainManager.isTokenStored(type: .twitchAccessToken) {
+            twitchAuthStatus = .authenticated
         }
-    }
-    
-    private func setupAuthenticationObservers() {
-        // Monitor network connectivity
-        networkManager.$isConnected
-            .dropFirst()
-            .sink { [weak self] isConnected in
-                if !isConnected {
-                    self?.authenticationError = AuthenticationError.networkError
-                }
-            }
-            .store(in: &cancellables)
+        
+        // Check YouTube tokens
+        if keychainManager.isTokenStored(type: .youtubeAccessToken) {
+            youtubeAuthStatus = .authenticated
+        }
+        
+        // Validate tokens if needed
+        Task {
+            await validateStoredTokens()
+        }
     }
     
     private func performOAuthFlow(config: OAuthConfig, platform: AuthPlatform) async throws -> OAuthResult {
@@ -287,78 +319,70 @@ class AuthenticationService: NSObject, ObservableObject {
     }
     
     private func completeTwitchAuthentication(authResult: OAuthResult) async throws {
-        // Store tokens in TwitchService
-        // This would integrate with the existing TwitchService
+        let keychainManager = KeychainManager.shared
         
-        // Fetch user profile
-        let userProfile = try await fetchTwitchUserProfile(accessToken: authResult.accessToken)
-        
-        // Create or update user
-        let twitchAuth = PlatformAuthentication(
-            platform: .twitch,
-            accessToken: authResult.accessToken,
-            refreshToken: authResult.refreshToken,
-            expiresAt: authResult.expiresAt,
-            scopes: authResult.scopes,
-            userProfile: userProfile
-        )
-        
-        if currentUser != nil {
-            currentUser?.twitchAuth = twitchAuth
-        } else {
-            currentUser = AuthenticatedUser(
-                id: userProfile.id,
-                primaryEmail: userProfile.email,
-                displayName: userProfile.displayName,
-                avatarURL: userProfile.profileImageURL,
-                twitchAuth: twitchAuth,
-                youtubeAuth: nil,
-                createdAt: Date(),
-                lastLoginAt: Date()
+        do {
+            // Store tokens securely
+            try keychainManager.storeToken(authResult.accessToken, type: .twitchAccessToken)
+            if let refreshToken = authResult.refreshToken {
+                try keychainManager.storeToken(refreshToken, type: .twitchRefreshToken)
+            }
+            
+            // Fetch and store user profile
+            let userProfile = try await fetchTwitchUserProfile(accessToken: authResult.accessToken)
+            let platformAuth = PlatformAuthentication(
+                platform: .twitch,
+                accessToken: authResult.accessToken,
+                refreshToken: authResult.refreshToken,
+                expiresAt: authResult.expiresAt,
+                scopes: authResult.scopes,
+                userProfile: userProfile
             )
+            
+            try keychainManager.storeUserData(platformAuth, type: .authState)
+            
+            // Configure TwitchService with new token
+            twitchService.configure(with: authResult.accessToken)
+            
+            twitchAuthStatus = .authenticated
+            print("✅ Twitch authentication completed successfully")
+            
+        } catch {
+            print("❌ Failed to complete Twitch authentication: \(error)")
+            throw AuthenticationError.storageError
         }
-        
-        twitchAuthStatus = .authenticated
-        isAuthenticated = true
-        
-        // Store credentials
-        storeCredentials()
     }
     
     private func completeYouTubeAuthentication(authResult: OAuthResult) async throws {
-        // Fetch user profile
-        let userProfile = try await fetchYouTubeUserProfile(accessToken: authResult.accessToken)
+        let keychainManager = KeychainManager.shared
         
-        // Create or update user
-        let youtubeAuth = PlatformAuthentication(
-            platform: .youtube,
-            accessToken: authResult.accessToken,
-            refreshToken: authResult.refreshToken,
-            expiresAt: authResult.expiresAt,
-            scopes: authResult.scopes,
-            userProfile: userProfile
-        )
-        
-        if currentUser != nil {
-            currentUser?.youtubeAuth = youtubeAuth
-        } else {
-            currentUser = AuthenticatedUser(
-                id: userProfile.id,
-                primaryEmail: userProfile.email,
-                displayName: userProfile.displayName,
-                avatarURL: userProfile.profileImageURL,
-                twitchAuth: nil,
-                youtubeAuth: youtubeAuth,
-                createdAt: Date(),
-                lastLoginAt: Date()
+        do {
+            // Store tokens securely
+            try keychainManager.storeToken(authResult.accessToken, type: .youtubeAccessToken)
+            if let refreshToken = authResult.refreshToken {
+                try keychainManager.storeToken(refreshToken, type: .youtubeRefreshToken)
+            }
+            
+            // Fetch and store user profile
+            let userProfile = try await fetchYouTubeUserProfile(accessToken: authResult.accessToken)
+            let platformAuth = PlatformAuthentication(
+                platform: .youtube,
+                accessToken: authResult.accessToken,
+                refreshToken: authResult.refreshToken,
+                expiresAt: authResult.expiresAt,
+                scopes: authResult.scopes,
+                userProfile: userProfile
             )
+            
+            try keychainManager.storeUserData(platformAuth, type: .authState)
+            
+            youtubeAuthStatus = .authenticated
+            print("✅ YouTube authentication completed successfully")
+            
+        } catch {
+            print("❌ Failed to complete YouTube authentication: \(error)")
+            throw AuthenticationError.storageError
         }
-        
-        youtubeAuthStatus = .authenticated
-        isAuthenticated = true
-        
-        // Store credentials
-        storeCredentials()
     }
     
     private func fetchTwitchUserProfile(accessToken: String) async throws -> UserProfile {
@@ -388,39 +412,42 @@ class AuthenticationService: NSObject, ObservableObject {
     }
     
     private func refreshTwitchToken() async throws {
-        guard let twitchAuth = currentUser?.twitchAuth,
-              let refreshToken = twitchAuth.refreshToken else {
+        let keychainManager = KeychainManager.shared
+        
+        guard let refreshToken = try keychainManager.retrieveToken(type: .twitchRefreshToken) else {
             throw AuthenticationError.noRefreshToken
         }
         
         let tokens = try await refreshTokens(refreshToken: refreshToken, config: twitchConfig)
         
-        // Update stored authentication
-        currentUser?.twitchAuth?.accessToken = tokens.accessToken
-        currentUser?.twitchAuth?.expiresAt = Date().addingTimeInterval(TimeInterval(tokens.expiresIn))
+        // Update stored tokens
+        try keychainManager.storeToken(tokens.accessToken, type: .twitchAccessToken)
         if let newRefreshToken = tokens.refreshToken {
-            currentUser?.twitchAuth?.refreshToken = newRefreshToken
+            try keychainManager.storeToken(newRefreshToken, type: .twitchRefreshToken)
         }
         
-        storeCredentials()
+        // Update TwitchService
+        twitchService.configure(with: tokens.accessToken)
+        
+        print("✅ Twitch token refreshed successfully")
     }
     
     private func refreshYouTubeToken() async throws {
-        guard let youtubeAuth = currentUser?.youtubeAuth,
-              let refreshToken = youtubeAuth.refreshToken else {
+        let keychainManager = KeychainManager.shared
+        
+        guard let refreshToken = try keychainManager.retrieveToken(type: .youtubeRefreshToken) else {
             throw AuthenticationError.noRefreshToken
         }
         
         let tokens = try await refreshTokens(refreshToken: refreshToken, config: youtubeConfig)
         
-        // Update stored authentication
-        currentUser?.youtubeAuth?.accessToken = tokens.accessToken
-        currentUser?.youtubeAuth?.expiresAt = Date().addingTimeInterval(TimeInterval(tokens.expiresIn))
+        // Update stored tokens
+        try keychainManager.storeToken(tokens.accessToken, type: .youtubeAccessToken)
         if let newRefreshToken = tokens.refreshToken {
-            currentUser?.youtubeAuth?.refreshToken = newRefreshToken
+            try keychainManager.storeToken(newRefreshToken, type: .youtubeRefreshToken)
         }
         
-        storeCredentials()
+        print("✅ YouTube token refreshed successfully")
     }
     
     private func refreshTokens(refreshToken: String, config: OAuthConfig) async throws -> TokenResponse {
@@ -453,66 +480,90 @@ class AuthenticationService: NSObject, ObservableObject {
     }
     
     private func validateStoredTokens() async {
-        guard let user = currentUser else { return }
+        let keychainManager = KeychainManager.shared
         
         // Check Twitch token
-        if let twitchAuth = user.twitchAuth {
-            if twitchAuth.expiresAt <= Date() {
-                do {
+        if keychainManager.isTokenStored(type: .twitchAccessToken) {
+            do {
+                if let platformAuth = try keychainManager.retrieveUserData(type: .authState, as: PlatformAuthentication.self),
+                   platformAuth.platform == .twitch,
+                   platformAuth.expiresAt <= Date() {
+                    // Token is expired, try to refresh
                     try await refreshTwitchToken()
-                } catch {
-                    twitchAuthStatus = .error(error)
+                } else {
+                    twitchAuthStatus = .authenticated
                 }
+            } catch {
+                print("⚠️ Twitch token validation failed: \(error)")
+                twitchAuthStatus = .error(error)
+                // Clear invalid token
+                try? keychainManager.deleteToken(type: .twitchAccessToken)
+                try? keychainManager.deleteToken(type: .twitchRefreshToken)
             }
         }
         
         // Check YouTube token
-        if let youtubeAuth = user.youtubeAuth {
-            if youtubeAuth.expiresAt <= Date() {
-                do {
+        if keychainManager.isTokenStored(type: .youtubeAccessToken) {
+            do {
+                if let platformAuth = try keychainManager.retrieveUserData(type: .authState, as: PlatformAuthentication.self),
+                   platformAuth.platform == .youtube,
+                   platformAuth.expiresAt <= Date() {
+                    // Token is expired, try to refresh
                     try await refreshYouTubeToken()
-                } catch {
-                    youtubeAuthStatus = .error(error)
+                } else {
+                    youtubeAuthStatus = .authenticated
                 }
-            }
-        }
-    }
-    
-    private func updateUserData() async {
-        guard let user = currentUser else { return }
-        
-        // Update user data from platforms
-        if let twitchAuth = user.twitchAuth {
-            do {
-                let profile = try await fetchTwitchUserProfile(accessToken: twitchAuth.accessToken)
-                currentUser?.twitchAuth?.userProfile = profile
             } catch {
-                print("Failed to update Twitch profile: \(error)")
+                print("⚠️ YouTube token validation failed: \(error)")
+                youtubeAuthStatus = .error(error)
+                // Clear invalid token
+                try? keychainManager.deleteToken(type: .youtubeAccessToken)
+                try? keychainManager.deleteToken(type: .youtubeRefreshToken)
             }
-        }
-        
-        if let youtubeAuth = user.youtubeAuth {
-            do {
-                let profile = try await fetchYouTubeUserProfile(accessToken: youtubeAuth.accessToken)
-                currentUser?.youtubeAuth?.userProfile = profile
-            } catch {
-                print("Failed to update YouTube profile: \(error)")
-            }
-        }
-        
-        storeCredentials()
-    }
-    
-    private func storeCredentials() {
-        guard let user = currentUser else { return }
-        
-        if let userData = try? JSONEncoder().encode(user) {
-            UserDefaults.standard.set(userData, forKey: "authenticated_user")
         }
     }
     
-    private func clearStoredCredentials() {
-        UserDefaults.standard.removeObject(forKey: "authenticated_user")
+    // MARK: - Utility Methods
+    
+    func clearError() {
+        authenticationError = nil
+        lastError = nil
+    }
+    
+    func getTwitchAccessToken() throws -> String? {
+        return try KeychainManager.shared.retrieveToken(type: .twitchAccessToken)
+    }
+    
+    func getYouTubeAccessToken() throws -> String? {
+        return try KeychainManager.shared.retrieveToken(type: .youtubeAccessToken)
+    }
+    
+    func isPlatformConnected(_ platform: AuthPlatform) -> Bool {
+        switch platform {
+        case .twitch:
+            return twitchAuthStatus == .authenticated
+        case .youtube:
+            return youtubeAuthStatus == .authenticated
+        }
+    }
+    
+    func disconnectPlatform(_ platform: AuthPlatform) async {
+        let keychainManager = KeychainManager.shared
+        
+        switch platform {
+        case .twitch:
+            try? keychainManager.deleteToken(type: .twitchAccessToken)
+            try? keychainManager.deleteToken(type: .twitchRefreshToken)
+            twitchAuthStatus = .notAuthenticated
+            twitchService.logout()
+            print("✅ Twitch disconnected")
+            
+        case .youtube:
+            try? keychainManager.deleteToken(type: .youtubeAccessToken)
+            try? keychainManager.deleteToken(type: .youtubeRefreshToken)
+            youtubeAuthStatus = .notAuthenticated
+            print("✅ YouTube disconnected")
+        }
     }
 }
 
@@ -528,17 +579,6 @@ extension AuthenticationService: ASWebAuthenticationPresentationContextProviding
 }
 
 // MARK: - Supporting Models
-
-struct AuthenticatedUser: Codable {
-    let id: String
-    let primaryEmail: String
-    let displayName: String
-    let avatarURL: String?
-    var twitchAuth: PlatformAuthentication?
-    var youtubeAuth: PlatformAuthentication?
-    let createdAt: Date
-    var lastLoginAt: Date
-}
 
 struct PlatformAuthentication: Codable {
     let platform: AuthPlatform
@@ -563,11 +603,24 @@ enum AuthPlatform: String, Codable {
     case youtube = "youtube"
 }
 
-enum PlatformAuthStatus {
+enum PlatformAuthStatus: Equatable {
     case notAuthenticated
     case authenticating
     case authenticated
     case error(Error)
+    
+    static func == (lhs: PlatformAuthStatus, rhs: PlatformAuthStatus) -> Bool {
+        switch (lhs, rhs) {
+        case (.notAuthenticated, .notAuthenticated),
+             (.authenticating, .authenticating),
+             (.authenticated, .authenticated):
+            return true
+        case (.error, .error):
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 struct OAuthConfig {
@@ -600,40 +653,5 @@ struct TokenResponse: Codable {
         case expiresIn = "expires_in"
         case scopes = "scope"
         case tokenType = "token_type"
-    }
-}
-
-enum AuthenticationError: Error, LocalizedError {
-    case networkError
-    case invalidURL
-    case invalidCallback
-    case oauthError(Error)
-    case tokenExchangeFailed
-    case tokenRefreshFailed
-    case noRefreshToken
-    case userCancelled
-    case unknown(Error)
-    
-    var errorDescription: String? {
-        switch self {
-        case .networkError:
-            return "Network connection required"
-        case .invalidURL:
-            return "Invalid authentication URL"
-        case .invalidCallback:
-            return "Invalid authentication callback"
-        case .oauthError(let error):
-            return "OAuth error: \(error.localizedDescription)"
-        case .tokenExchangeFailed:
-            return "Failed to exchange authorization code for tokens"
-        case .tokenRefreshFailed:
-            return "Failed to refresh authentication token"
-        case .noRefreshToken:
-            return "No refresh token available"
-        case .userCancelled:
-            return "Authentication was cancelled"
-        case .unknown(let error):
-            return "Unknown authentication error: \(error.localizedDescription)"
-        }
     }
 }

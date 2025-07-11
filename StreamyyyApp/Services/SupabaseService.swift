@@ -2,7 +2,7 @@
 //  SupabaseService.swift
 //  StreamyyyApp
 //
-//  Core Supabase service for database operations and authentication
+//  Real Clerk-authenticated Supabase service for database operations
 //
 
 import Foundation
@@ -10,16 +10,21 @@ import Supabase
 import Combine
 import SwiftUI
 
-// MARK: - Supabase Service
+// Resolve naming conflict with local User model
+typealias SupabaseUser = Supabase.User
+
+// MARK: - Real Supabase Service with Clerk Integration
 @MainActor
-public class SupabaseService: ObservableObject {
+public class RealSupabaseService: ObservableObject {
     
     // MARK: - Properties
-    public static let shared = SupabaseService()
+    public static let shared = RealSupabaseService()
     
-    private let client: SupabaseClient
+    private let baseClient: SupabaseClient
+    private var authenticatedClient: SupabaseClient?
     @Published public var isConnected: Bool = false
-    @Published public var currentUser: User?
+    @Published public var currentProfile: UserProfile?
+    @Published public var currentUser: SupabaseUser?
     @Published public var syncStatus: SyncStatus = .disconnected
     @Published public var lastSyncTime: Date?
     
@@ -27,62 +32,183 @@ public class SupabaseService: ObservableObject {
     private var connectionMonitor: Timer?
     private var retryAttempts: Int = 0
     private let maxRetryAttempts: Int = 3
+    private var currentSessionToken: String?
     
     // MARK: - Initialization
     private init() {
-        // Initialize Supabase client
-        self.client = SupabaseClient(
+        // Initialize base Supabase client (for public operations)
+        self.baseClient = SupabaseClient(
             supabaseURL: URL(string: Config.Supabase.url)!,
             supabaseKey: Config.Supabase.anonKey
         )
         
         setupConnectionMonitoring()
-        setupAuthStateListener()
+        observeClerkAuthentication()
     }
     
-    // MARK: - Authentication
-    public func signUp(email: String, password: String) async throws -> User {
-        do {
-            let response = try await client.auth.signUp(email: email, password: password)
-            if let user = response.user {
-                await createUserProfile(user: user)
-                return user
+    // MARK: - Clerk Integration
+    
+    private func observeClerkAuthentication() {
+        // Observe Clerk authentication state changes
+        ClerkManager.shared.$isAuthenticated
+            .combineLatest(ClerkManager.shared.$sessionToken)
+            .sink { [weak self] isAuthenticated, sessionToken in
+                if isAuthenticated, let token = sessionToken {
+                    self?.setupAuthenticatedClient(sessionToken: token)
+                } else {
+                    self?.clearAuthenticatedClient()
+                }
             }
-            throw SupabaseError.authenticationFailed
-        } catch {
-            throw handleError(error)
+            .store(in: &cancellables)
+    }
+    
+    private func setupAuthenticatedClient(sessionToken: String) {
+        currentSessionToken = sessionToken
+        
+        // Create authenticated client with Clerk session token
+        authenticatedClient = SupabaseClient(
+            supabaseURL: URL(string: Config.Supabase.url)!,
+            supabaseKey: Config.Supabase.anonKey,
+            options: SupabaseClientOptions(
+                auth: SupabaseAuthClientOptions(
+                    accessToken: { @MainActor in
+                        return sessionToken
+                    }
+                )
+            )
+        )
+        
+        syncStatus = .connected
+        isConnected = true
+        
+        print("✅ Supabase authenticated client setup completed")
+    }
+    
+    private func clearAuthenticatedClient() {
+        authenticatedClient = nil
+        currentSessionToken = nil
+        currentProfile = nil
+        syncStatus = .disconnected
+        isConnected = false
+        
+        print("ℹ️ Supabase authenticated client cleared")
+    }
+    
+    // MARK: - Client Access
+    
+    private var client: SupabaseClient {
+        return authenticatedClient ?? baseClient
+    }
+    
+    private func requireAuthentication() throws {
+        guard authenticatedClient != nil else {
+            throw SupabaseError.authenticationRequired
         }
     }
     
-    public func signIn(email: String, password: String) async throws -> User {
+    // MARK: - User Profile Management (Clerk Integration)
+    
+    public func syncUserProfile(clerkUser: ClerkUser, sessionToken: String) async {
         do {
-            let response = try await client.auth.signIn(email: email, password: password)
-            if let user = response.user {
-                await syncUserData(user: user)
-                return user
+            currentSessionToken = sessionToken
+            
+            // Check if profile exists
+            let existingProfile = try await getUserProfile(clerkUserId: clerkUser.id)
+            
+            if let profile = existingProfile {
+                // Update existing profile
+                let updatedProfile = try await updateUserProfile(clerkUser: clerkUser, sessionToken: sessionToken)
+                currentProfile = updatedProfile
+            } else {
+                // Create new profile
+                let newProfile = try await createUserProfile(clerkUser: clerkUser, sessionToken: sessionToken)
+                currentProfile = newProfile
             }
-            throw SupabaseError.authenticationFailed
+            
+            syncStatus = .synced
+            lastSyncTime = Date()
+            
         } catch {
-            throw handleError(error)
+            print("❌ Failed to sync user profile: \(error)")
+            syncStatus = .error
         }
     }
     
-    public func signOut() async throws {
+    public func syncUserProfile(clerkUser: ClerkUser, sessionToken: String) async {
         do {
-            try await client.auth.signOut()
-            currentUser = nil
-            syncStatus = .disconnected
+            try await createUserProfile(clerkUser: clerkUser, sessionToken: sessionToken)
         } catch {
-            throw handleError(error)
+            print("Failed to sync user profile: \(error)")
         }
     }
     
-    public func getCurrentUser() async throws -> User? {
-        do {
-            return try await client.auth.user
-        } catch {
-            throw handleError(error)
-        }
+    public func createUserProfile(clerkUser: ClerkUser, sessionToken: String) async throws -> UserProfile {
+        try requireAuthentication()
+        
+        let profile = UserProfile(
+            id: UUID().uuidString,
+            clerkUserId: clerkUser.id,
+            stripeCustomerId: nil,
+            email: clerkUser.primaryEmailAddress?.emailAddress ?? "",
+            fullName: clerkUser.displayName,
+            avatarUrl: clerkUser.profileImageUrl,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        
+        let response = try await client.database
+            .from("profiles")
+            .insert(profile)
+            .select()
+            .single()
+            .execute()
+        
+        let createdProfile = try response.value.decode(as: UserProfile.self)
+        print("✅ User profile created in Supabase")
+        
+        return createdProfile
+    }
+    
+    public func updateUserProfile(clerkUser: ClerkUser, sessionToken: String) async throws -> UserProfile {
+        try requireAuthentication()
+        
+        let updateData: [String: Any] = [
+            "email": clerkUser.primaryEmailAddress?.emailAddress ?? "",
+            "full_name": clerkUser.displayName,
+            "avatar_url": clerkUser.profileImageUrl ?? NSNull(),
+            "updated_at": ISO8601DateFormatter().string(from: Date())
+        ]
+        
+        let response = try await client.database
+            .from("profiles")
+            .update(updateData)
+            .eq("clerk_user_id", value: clerkUser.id)
+            .select()
+            .single()
+            .execute()
+        
+        let updatedProfile = try response.value.decode(as: UserProfile.self)
+        print("✅ User profile updated in Supabase")
+        
+        return updatedProfile
+    }
+    
+    public func getUserProfile(clerkUserId: String) async throws -> UserProfile? {
+        let response = try await client.database
+            .from("profiles")
+            .select("*")
+            .eq("clerk_user_id", value: clerkUserId)
+            .maybeSingle()
+            .execute()
+        
+        return try response.value.decode(as: UserProfile?.self)
+    }
+    
+    public func signOut() {
+        clearAuthenticatedClient()
+        currentProfile = nil
+        syncStatus = .disconnected
+        lastSyncTime = nil
     }
     
     // MARK: - Connection Management
@@ -125,7 +251,7 @@ public class SupabaseService: ObservableObject {
     }
     
     // MARK: - User Profile Management
-    private func createUserProfile(user: User) async {
+    private func createUserProfile(user: SupabaseUser) async {
         do {
             let profile: [String: Any] = [
                 "id": user.id.uuidString,
@@ -146,7 +272,7 @@ public class SupabaseService: ObservableObject {
         }
     }
     
-    private func syncUserData(user: User) async {
+    private func syncUserData(user: SupabaseUser) async {
         do {
             let response = try await client.database
                 .from("users")
@@ -195,7 +321,7 @@ public class SupabaseService: ObservableObject {
     ) async throws -> [T] {
         do {
             let response = try await query.execute()
-            return try response.decoded(as: [T].self)
+            return try JSONDecoder().decode([T].self, from: response.data)
         } catch {
             throw handleError(error)
         }
@@ -212,7 +338,7 @@ public class SupabaseService: ObservableObject {
                 .single()
                 .execute()
             
-            return try response.decoded(as: T.self)
+            return try JSONDecoder().decode(T.self, from: response.data)
         } catch {
             throw handleError(error)
         }
@@ -231,7 +357,7 @@ public class SupabaseService: ObservableObject {
                 .single()
                 .execute()
             
-            return try response.decoded(as: T.self)
+            return try JSONDecoder().decode(T.self, from: response.data)
         } catch {
             throw handleError(error)
         }
@@ -255,20 +381,20 @@ public class SupabaseService: ObservableObject {
     // MARK: - Real-time Subscriptions
     public func subscribeToTable(
         table: String,
-        callback: @escaping (PostgrestResponse) -> Void
-    ) throws -> RealtimeChannel {
+        callback: @escaping (RealtimeMessage) -> Void
+    ) async throws -> RealtimeChannel {
         let channel = client.realtime.channel("public:\(table)")
         
-        channel.on(.all) { payload in
+        await channel.on(.all) { payload in
             callback(payload)
         }
         
-        try channel.subscribe()
+        await channel.subscribe()
         return channel
     }
     
-    public func unsubscribe(channel: RealtimeChannel) {
-        channel.unsubscribe()
+    public func unsubscribe(channel: RealtimeChannel) async {
+        await channel.unsubscribe()
     }
     
     // MARK: - Batch Operations
@@ -282,7 +408,7 @@ public class SupabaseService: ObservableObject {
                 .insert(data)
                 .execute()
             
-            return try response.decoded(as: [T].self)
+            return try JSONDecoder().decode([T].self, from: response.data)
         } catch {
             throw handleError(error)
         }
@@ -316,14 +442,7 @@ public class SupabaseService: ObservableObject {
     // MARK: - Error Handling
     private func handleError(_ error: Error) -> SupabaseError {
         if let postgrestError = error as? PostgrestError {
-            switch postgrestError {
-            case .api(let apiError):
-                return .databaseError(apiError.message)
-            case .network(let networkError):
-                return .networkError(networkError.localizedDescription)
-            case .unknown(let message):
-                return .unknown(message)
-            }
+            return .databaseError(postgrestError.localizedDescription)
         }
         
         if let authError = error as? AuthError {
@@ -395,20 +514,357 @@ public enum SyncStatus: String, CaseIterable {
     }
 }
 
-// MARK: - Supabase Errors
+// MARK: - Supporting Models for Database Sync
+
+public struct SyncLayout: Codable {
+    let id: String
+    let userId: String
+    let name: String
+    let layoutData: Data
+    let isDefault: Bool
+    let createdAt: Date
+    let updatedAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id, name, isDefault, createdAt, updatedAt
+        case userId = "user_id"
+        case layoutData = "layout_data"
+    }
+    
+    init(from layout: Layout, userId: String) {
+        self.id = layout.id
+        self.userId = userId
+        self.name = layout.name
+        // Convert layout to JSON data
+        if let dict = layout.toDictionary(),
+           let jsonData = try? JSONSerialization.data(withJSONObject: dict) {
+            self.layoutData = jsonData
+        } else {
+            self.layoutData = Data()
+        }
+        self.isDefault = layout.isDefault
+        self.createdAt = layout.createdAt
+        self.updatedAt = layout.updatedAt
+    }
+    
+    func toLayout() -> Layout {
+        let layout = Layout(name: name, type: .custom, configuration: LayoutConfiguration())
+        layout.id = id
+        layout.isDefault = isDefault
+        layout.createdAt = createdAt
+        layout.updatedAt = updatedAt
+        return layout
+    }
+    
+    func toDictionary() throws -> [String: Any] {
+        let data = try JSONEncoder().encode(self)
+        return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+    }
+}
+
+public struct SyncStream: Codable {
+    let id: String
+    let userId: String
+    let url: String
+    let platform: String
+    let streamerName: String
+    let isLive: Bool
+    let viewerCount: Int
+    let createdAt: Date
+    let updatedAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id, url, platform, isLive, viewerCount, createdAt, updatedAt
+        case userId = "user_id"
+        case streamerName = "streamer_name"
+    }
+    
+    init(from stream: Stream, userId: String) {
+        self.id = stream.id
+        self.userId = userId
+        self.url = stream.url
+        self.platform = stream.platform.rawValue
+        self.streamerName = stream.streamerName ?? ""
+        self.isLive = stream.isLive
+        self.viewerCount = stream.viewerCount
+        self.createdAt = stream.createdAt
+        self.updatedAt = stream.updatedAt
+    }
+    
+    func toStream() -> Stream {
+        let stream = Stream(
+            id: id,
+            url: url,
+            platform: Platform(rawValue: platform) ?? .twitch,
+            title: streamerName
+        )
+        // Set additional properties
+        stream.streamerName = streamerName
+        stream.isLive = isLive
+        stream.viewerCount = viewerCount
+        stream.createdAt = createdAt
+        stream.updatedAt = updatedAt
+        return stream
+    }
+}
+
+public struct SyncStreamSession: Codable {
+    let id: String
+    let userId: String
+    let streamId: String
+    let startTime: Date
+    let endTime: Date?
+    let duration: TimeInterval
+    let quality: String
+    let deviceType: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id, duration, quality, startTime, endTime
+        case userId = "user_id"
+        case streamId = "stream_id"
+        case deviceType = "device_type"
+    }
+    
+    init(from session: StreamSession, userId: String) {
+        self.id = session.id
+        self.userId = userId
+        self.streamId = session.streamId
+        self.startTime = session.startTime
+        self.endTime = session.endTime
+        self.duration = session.duration
+        self.quality = session.quality.rawValue
+        self.deviceType = "iOS"
+    }
+    
+    func toStreamSession() -> StreamSession {
+        return StreamSession(
+            id: id,
+            streamId: streamId,
+            startTime: startTime,
+            endTime: endTime,
+            duration: duration,
+            quality: StreamQuality(rawValue: quality) ?? .auto
+        )
+    }
+    
+    func toDictionary() throws -> [String: Any] {
+        let data = try JSONEncoder().encode(self)
+        return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+    }
+}
+
+public struct SyncStreamAnalytics: Codable {
+    let id: String = UUID().uuidString
+    let userId: String
+    let streamId: String
+    let event: String
+    let timestamp: Date
+    let metadata: [String: String]
+    
+    enum CodingKeys: String, CodingKey {
+        case id, event, timestamp, metadata
+        case userId = "user_id"
+        case streamId = "stream_id"
+    }
+    
+    init(from analytics: StreamAnalytics, userId: String) {
+        self.userId = userId
+        self.streamId = analytics.streamId
+        self.event = analytics.event
+        self.timestamp = analytics.timestamp
+        self.metadata = analytics.metadata
+    }
+    
+    func toStreamAnalytics() -> StreamAnalytics {
+        return StreamAnalytics(
+            streamId: streamId,
+            event: event,
+            timestamp: timestamp,
+            metadata: metadata
+        )
+    }
+    
+    func toDictionary() throws -> [String: Any] {
+        let data = try JSONEncoder().encode(self)
+        return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+    }
+}
+
+public struct SyncStreamBackup: Codable {
+    let id: String
+    let userId: String
+    let name: String
+    let data: Data
+    let createdAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id, name, data, createdAt
+        case userId = "user_id"
+    }
+    
+    init(from backup: StreamBackup) {
+        self.id = backup.id
+        self.userId = backup.userId
+        self.name = backup.name
+        self.data = (try? JSONEncoder().encode(backup.data)) ?? Data()
+        self.createdAt = backup.createdAt
+    }
+    
+    func toStreamBackup() -> StreamBackup {
+        let backupData = (try? JSONDecoder().decode(BackupData.self, from: data)) ?? BackupData(streams: [], layouts: [], sessions: [])
+        return StreamBackup(
+            id: id,
+            userId: userId,
+            name: name,
+            data: backupData,
+            createdAt: createdAt
+        )
+    }
+}
+
+public struct SyncStreamTemplate: Codable {
+    let id: String
+    let userId: String
+    let name: String
+    let description: String
+    let category: String
+    let isPublic: Bool
+    let downloads: Int
+    let templateData: Data
+    let createdAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, category, downloads, createdAt
+        case userId = "user_id"
+        case isPublic = "is_public"
+        case templateData = "template_data"
+    }
+    
+    init(from template: StreamTemplate, userId: String) {
+        self.id = template.id
+        self.userId = userId
+        self.name = template.name
+        self.description = template.description
+        self.category = template.category
+        self.isPublic = template.isPublic
+        self.downloads = template.downloads
+        self.templateData = (try? JSONEncoder().encode(template)) ?? Data()
+        self.createdAt = template.createdAt
+    }
+    
+    func toStreamTemplate() -> StreamTemplate {
+        return StreamTemplate(
+            id: id,
+            name: name,
+            description: description,
+            category: category,
+            isPublic: isPublic,
+            downloads: downloads,
+            createdAt: createdAt
+        )
+    }
+}
+
+// MARK: - Placeholder Models (need to be defined elsewhere in the project)
+
+public struct StreamSession {
+    let id: String
+    let streamId: String
+    let startTime: Date
+    let endTime: Date?
+    let duration: TimeInterval
+    let quality: StreamQuality
+}
+
+public struct StreamAnalytics {
+    let streamId: String
+    let event: String
+    let timestamp: Date
+    let metadata: [String: String]
+}
+
+public struct StreamBackup {
+    let id: String
+    let userId: String
+    let name: String
+    let data: BackupData
+    let createdAt: Date
+}
+
+public struct BackupData: Codable {
+    let streams: [Stream]
+    let layouts: [Layout]
+    let sessions: [StreamSession]
+}
+
+public struct StreamTemplate {
+    let id: String
+    let name: String
+    let description: String
+    let category: String
+    let isPublic: Bool
+    let downloads: Int
+    let createdAt: Date
+}
+
+// MARK: - UserProfile Model (matching web app schema)
+
+public struct UserProfile: Codable, Identifiable {
+    public let id: String
+    public let clerkUserId: String
+    public let stripeCustomerId: String?
+    public let email: String
+    public let fullName: String?
+    public let avatarUrl: String?
+    public let createdAt: Date
+    public let updatedAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case clerkUserId = "clerk_user_id"
+        case stripeCustomerId = "stripe_customer_id"
+        case email
+        case fullName = "full_name"
+        case avatarUrl = "avatar_url"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+    
+    public var displayName: String {
+        return fullName ?? email.components(separatedBy: "@").first ?? "User"
+    }
+    
+    public var initials: String {
+        if let fullName = fullName {
+            let components = fullName.components(separatedBy: " ")
+            if components.count >= 2 {
+                return "\(components[0].prefix(1))\(components[1].prefix(1))".uppercased()
+            } else {
+                return String(fullName.prefix(1)).uppercased()
+            }
+        }
+        return String(email.prefix(1)).uppercased()
+    }
+}
+
 public enum SupabaseError: Error, LocalizedError {
     case configurationInvalid
+    case authenticationRequired
     case authenticationFailed
     case networkError(String)
     case databaseError(String)
     case syncConflict
     case dataCorruption
+    case profileNotFound
+    case invalidClerkToken
     case unknown(String)
     
     public var errorDescription: String? {
         switch self {
         case .configurationInvalid:
             return "Supabase configuration is invalid"
+        case .authenticationRequired:
+            return "Authentication is required for this operation"
         case .authenticationFailed:
             return "Authentication failed"
         case .networkError(let message):
@@ -419,6 +875,10 @@ public enum SupabaseError: Error, LocalizedError {
             return "Sync conflict detected"
         case .dataCorruption:
             return "Data corruption detected"
+        case .profileNotFound:
+            return "User profile not found"
+        case .invalidClerkToken:
+            return "Invalid Clerk authentication token"
         case .unknown(let message):
             return "Unknown error: \(message)"
         }
@@ -428,8 +888,8 @@ public enum SupabaseError: Error, LocalizedError {
         switch self {
         case .configurationInvalid:
             return "Please check your Supabase configuration in Config.swift"
-        case .authenticationFailed:
-            return "Please check your credentials and try again"
+        case .authenticationRequired, .authenticationFailed, .invalidClerkToken:
+            return "Please sign in again"
         case .networkError:
             return "Please check your internet connection and try again"
         case .databaseError:
@@ -438,6 +898,8 @@ public enum SupabaseError: Error, LocalizedError {
             return "Please resolve the sync conflict and try again"
         case .dataCorruption:
             return "Please restore from backup or contact support"
+        case .profileNotFound:
+            return "Your profile will be created automatically"
         case .unknown:
             return "Please try again or contact support"
         }

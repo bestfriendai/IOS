@@ -400,6 +400,66 @@ extension Layout {
         
         return layout
     }
+    
+    // MARK: - Export/Import Methods
+    public func toDictionary() -> [String: Any]? {
+        do {
+            let data = try JSONEncoder().encode(self)
+            let dictionary = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
+            return dictionary
+        } catch {
+            print("Error converting layout to dictionary: \(error)")
+            return nil
+        }
+    }
+    
+    public func exportConfiguration() -> [String: Any] {
+        return [
+            "id": id,
+            "name": name,
+            "description": description ?? "",
+            "type": type.rawValue,
+            "configuration": [
+                "maxStreams": configuration.maxStreams,
+                "gridColumns": configuration.gridColumns,
+                "gridRows": configuration.gridRows,
+                "spacing": configuration.spacing,
+                "aspectRatio": configuration.aspectRatio
+            ],
+            "version": version,
+            "tags": tags,
+            "metadata": metadata,
+            "exportedAt": ISO8601DateFormatter().string(from: Date())
+        ]
+    }
+    
+    public static func importConfiguration(_ data: [String: Any]) -> Layout? {
+        guard let name = data["name"] as? String,
+              let typeString = data["type"] as? String,
+              let type = LayoutType(rawValue: typeString) else {
+            return nil
+        }
+        
+        let layout = Layout(name: name, type: type, configuration: LayoutConfiguration())
+        
+        if let id = data["id"] as? String {
+            layout.id = id
+        }
+        
+        if let description = data["description"] as? String {
+            layout.description = description
+        }
+        
+        if let tags = data["tags"] as? [String] {
+            layout.tags = tags
+        }
+        
+        if let metadata = data["metadata"] as? [String: String] {
+            layout.metadata = metadata
+        }
+        
+        return layout
+    }
 }
 
 // MARK: - Layout Type

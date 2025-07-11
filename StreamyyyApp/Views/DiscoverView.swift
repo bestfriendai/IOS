@@ -10,15 +10,16 @@ import SwiftUI
 
 struct DiscoverView: View {
     @StateObject private var appState = AppStateManager.shared
-    @StateObject private var twitchAPI = TwitchAPIService.shared
+    @StateObject private var discoveryService = StreamDiscoveryService()
     @State private var searchText = ""
     @State private var selectedCategory: StreamCategory = .all
-    @State private var featuredStreams: [FeaturedStream] = []
-    @State private var trendingStreams: [TrendingStream] = []
-    @State private var isLoading = false
     @State private var showingStreamAddedPopup = false
     @State private var addedStreamTitle = ""
     @State private var viewMode: ViewMode = .grid
+    @State private var searchFilters = SearchFilters()
+    @State private var showingFilters = false
+    @State private var lastSearchQuery = ""
+    @State private var searchTask: Task<Void, Never>?
     
     private let columns = [
         GridItem(.flexible(), spacing: StreamyyySpacing.streamGridSpacing),
@@ -41,7 +42,7 @@ struct DiscoverView: View {
                         modernCategoryFilter
                         
                         // Featured Section
-                        if !featuredStreams.isEmpty {
+                        if !discoveryService.featuredStreams.isEmpty {
                             modernFeaturedSection
                         }
                         
@@ -65,8 +66,13 @@ struct DiscoverView: View {
                 }
                 
                 // Loading overlay
-                if isLoading {
+                if discoveryService.isLoading {
                     loadingOverlay
+                }
+                
+                // Error handling
+                if let error = discoveryService.error {
+                    errorOverlay(error)
                 }
             }
             .navigationTitle("Discover")
@@ -88,33 +94,99 @@ struct DiscoverView: View {
     // MARK: - Modern UI Sections
     
     private var modernSearchSection: some View {
-        StreamyyyCard(style: .default, shadowStyle: .default) {
-            HStack(spacing: StreamyyySpacing.sm) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: StreamyyySpacing.iconSizeMD, weight: .medium))
-                    .foregroundColor(StreamyyyColors.textSecondary)
-                
-                TextField("Search streams, games, or creators", text: $searchText)
-                    .font(StreamyyyTypography.bodyLarge)
-                    .foregroundColor(StreamyyyColors.textPrimary)
-                    .textFieldStyle(.plain)
-                    .autocorrectionDisabled()
-                
-                if !searchText.isEmpty {
-                    Button(action: { 
-                        searchText = "" 
-                        StreamyyyDesignSystem.hapticFeedback(.light)
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: StreamyyySpacing.iconSizeMD, weight: .medium))
-                            .foregroundColor(StreamyyyColors.textSecondary)
+        VStack(spacing: StreamyyySpacing.md) {
+            StreamyyyCard(style: .default, shadowStyle: .default) {
+                HStack(spacing: StreamyyySpacing.sm) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: StreamyyySpacing.iconSizeMD, weight: .medium))
+                        .foregroundColor(StreamyyyColors.textSecondary)
+                    
+                    TextField("Search streams, games, or creators", text: $searchText)
+                        .font(StreamyyyTypography.bodyLarge)
+                        .foregroundColor(StreamyyyColors.textPrimary)
+                        .textFieldStyle(.plain)
+                        .autocorrectionDisabled()
+                        .onSubmit {
+                            performSearch()
+                        }
+                        .onChange(of: searchText) { newValue in
+                            // Debounced search
+                            searchTask?.cancel()
+                            searchTask = Task {
+                                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                                if !Task.isCancelled && !newValue.isEmpty {
+                                    await performSearch()
+                                }
+                            }
+                        }
+                    
+                    HStack(spacing: StreamyyySpacing.xs) {
+                        if !searchText.isEmpty {
+                            Button(action: {
+                                searchText = ""
+                                discoveryService.searchResults = []
+                                StreamyyyDesignSystem.hapticFeedback(.light)
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: StreamyyySpacing.iconSizeMD, weight: .medium))
+                                    .foregroundColor(StreamyyyColors.textSecondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        
+                        Button(action: {
+                            showingFilters = true
+                            StreamyyyDesignSystem.hapticFeedback(.light)
+                        }) {
+                            Image(systemName: hasActiveFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                                .font(.system(size: StreamyyySpacing.iconSizeMD, weight: .medium))
+                                .foregroundColor(hasActiveFilters ? StreamyyyColors.primary : StreamyyyColors.textSecondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+            }
+            
+            // Search Results Section
+            if !discoveryService.searchResults.isEmpty {
+                searchResultsSection
             }
         }
         .accessibilityLabel("Search streams and content")
         .accessibilityHint("Enter text to search for streams, games, or creators")
+        .sheet(isPresented: $showingFilters) {
+            SearchFiltersView(filters: $searchFilters) {
+                if !searchText.isEmpty {
+                    Task {
+                        await performSearch()
+                    }
+                }
+            }
+        }
+    }
+    
+    private var searchResultsSection: some View {
+        VStack(alignment: .leading, spacing: StreamyyySpacing.md) {
+            HStack {
+                Text("Search Results")
+                    .titleMedium()
+                    .foregroundColor(StreamyyyColors.textPrimary)
+                
+                Spacer()
+                
+                Text("\(discoveryService.searchResults.count) results")
+                    .font(StreamyyyTypography.captionMedium)
+                    .foregroundColor(StreamyyyColors.textSecondary)
+            }
+            
+            LazyVStack(spacing: StreamyyySpacing.sm) {
+                ForEach(Array(discoveryService.searchResults.enumerated()), id: \.element.id) { index, stream in
+                    SearchResultCard(stream: stream, rank: index + 1) {
+                        addDiscoveredStream(stream)
+                    }
+                }
+            }
+        }
     }
     
     private var modernCategoryFilter: some View {
@@ -147,14 +219,16 @@ struct DiscoverView: View {
     private var modernFeaturedSection: some View {
         VStack(alignment: .leading, spacing: StreamyyySpacing.md) {
             HStack {
-                Text("Featured")
+                Text("Featured Streams")
                     .titleMedium()
                     .foregroundColor(StreamyyyColors.textPrimary)
                 
                 Spacer()
                 
-                Button("See All") {
-                    // Handle see all action
+                Button("Refresh") {
+                    Task {
+                        await discoveryService.loadFeaturedContent()
+                    }
                     StreamyyyDesignSystem.hapticFeedback(.light)
                 }
                 .font(StreamyyyTypography.labelMedium)
@@ -163,9 +237,9 @@ struct DiscoverView: View {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: StreamyyySpacing.md) {
-                    ForEach(featuredStreams, id: \.id) { stream in
-                        ModernFeaturedStreamCard(stream: stream) {
-                            addStream(stream.url, title: stream.title)
+                    ForEach(discoveryService.featuredStreams, id: \.id) { stream in
+                        ModernDiscoveredStreamCard(stream: stream, style: .featured) {
+                            addDiscoveredStream(stream)
                         }
                     }
                 }
@@ -209,24 +283,24 @@ struct DiscoverView: View {
             if viewMode == .grid {
                 LazyVGrid(columns: columns, spacing: StreamyyySpacing.md) {
                     ForEach(Array(filteredTrendingStreams.enumerated()), id: \.element.id) { index, stream in
-                        ModernTrendingStreamCard(
+                        ModernDiscoveredStreamCard(
                             stream: stream,
-                            rank: index + 1,
+                            style: .trending(rank: index + 1),
                             viewMode: .grid
                         ) {
-                            addStream(stream.url, title: stream.title)
+                            addDiscoveredStream(stream)
                         }
                     }
                 }
             } else {
                 LazyVStack(spacing: StreamyyySpacing.sm) {
                     ForEach(Array(filteredTrendingStreams.enumerated()), id: \.element.id) { index, stream in
-                        ModernTrendingStreamCard(
+                        ModernDiscoveredStreamCard(
                             stream: stream,
-                            rank: index + 1,
+                            style: .trending(rank: index + 1),
                             viewMode: .list
                         ) {
-                            addStream(stream.url, title: stream.title)
+                            addDiscoveredStream(stream)
                         }
                     }
                 }
@@ -242,17 +316,24 @@ struct DiscoverView: View {
                     .foregroundColor(StreamyyyColors.textPrimary)
                 
                 Spacer()
+                
+                Button("Refresh") {
+                    Task {
+                        await discoveryService.loadPopularCategories()
+                    }
+                    StreamyyyDesignSystem.hapticFeedback(.light)
+                }
+                .font(StreamyyyTypography.labelMedium)
+                .foregroundColor(StreamyyyColors.primary)
             }
             
             LazyVGrid(columns: columns, spacing: StreamyyySpacing.md) {
-                ForEach(popularCategories, id: \.name) { category in
+                ForEach(discoveryService.popularCategories, id: \.name) { category in
                     ModernCategoryCard(
-                        name: category.name,
-                        icon: category.icon,
-                        color: category.color,
-                        streamCount: category.streamCount
+                        category: category
                     ) {
-                        // Handle category selection
+                        // Filter by category
+                        selectedCategory = mapDiscoveryCategoryToStreamCategory(category)
                         StreamyyyDesignSystem.hapticFeedback(.light)
                     }
                 }
@@ -327,96 +408,71 @@ struct DiscoverView: View {
     
     // MARK: - Computed Properties
     
-    private var filteredTrendingStreams: [TrendingStream] {
+    private var filteredTrendingStreams: [DiscoveredStream] {
         if selectedCategory == .all {
-            return trendingStreams
+            return discoveryService.trendingStreams
         }
-        return trendingStreams.filter { $0.category == selectedCategory }
+        return discoveryService.trendingStreams.filter { stream in
+            guard let category = stream.category else { return false }
+            return mapGameToCategory(category) == selectedCategory
+        }
     }
     
-    private var popularCategories: [PopularCategory] {
-        return [
-            PopularCategory(name: "Gaming", icon: "gamecontroller.fill", color: StreamyyyColors.primary, streamCount: 1234),
-            PopularCategory(name: "Just Chatting", icon: "bubble.left.and.bubble.right.fill", color: StreamyyyColors.secondary, streamCount: 856),
-            PopularCategory(name: "Music", icon: "music.note", color: .orange, streamCount: 492),
-            PopularCategory(name: "Art", icon: "paintbrush.fill", color: .purple, streamCount: 234),
-            PopularCategory(name: "Tech", icon: "laptopcomputer", color: .blue, streamCount: 156),
-            PopularCategory(name: "Sports", icon: "sportscourt.fill", color: .green, streamCount: 89)
-        ]
+    private var hasActiveFilters: Bool {
+        return searchFilters.platforms != nil ||
+               searchFilters.categories != nil ||
+               searchFilters.languages != nil ||
+               searchFilters.liveOnly ||
+               searchFilters.minViewers != nil ||
+               searchFilters.maxViewers != nil ||
+               !searchFilters.includeNSFW
     }
     
     // MARK: - Actions
     
-    private func addStream(_ url: String, title: String) {
-        // Create a TwitchStream from the URL and title
-        let stream = TwitchStream(
-            id: UUID().uuidString,
-            userId: "user_\(UUID().uuidString)",
-            userLogin: title.lowercased().replacingOccurrences(of: " ", with: ""),
-            userName: title,
-            gameId: "",
-            gameName: "Unknown",
-            type: "live",
-            title: title,
-            viewerCount: 0,
-            startedAt: ISO8601DateFormatter().string(from: Date()),
-            language: "en",
-            thumbnailUrl: "https://static-cdn.jtvnw.net/previews-ttv/live_user_\(title.lowercased())-{width}x{height}.jpg",
-            tagIds: nil,
-            tags: nil,
-            isMature: false
+    private func addDiscoveredStream(_ discoveredStream: DiscoveredStream) {
+        // Convert DiscoveredStream to the app's Stream model
+        let stream = Stream(
+            id: discoveredStream.id,
+            url: discoveredStream.streamURL,
+            platform: discoveredStream.platform,
+            title: discoveredStream.title
         )
         
+        // Set additional properties
+        stream.streamerName = discoveredStream.channelName
+        stream.viewerCount = discoveredStream.viewerCount
+        stream.isLive = discoveredStream.isLive
+        stream.thumbnailURL = discoveredStream.thumbnailURL
+        stream.category = discoveredStream.category
+        stream.language = discoveredStream.language
+        stream.startedAt = discoveredStream.startedAt
+        stream.tags = discoveredStream.tags
+        stream.description = discoveredStream.description
+        
         appState.addStreamFromDiscover(stream)
-        addedStreamTitle = title
+        addedStreamTitle = discoveredStream.title
         showingStreamAddedPopup = true
         StreamyyyDesignSystem.hapticNotification(.success)
     }
     
-    private func loadDiscoverContent() async {
-        isLoading = true
-        
-        do {
-            // Load real featured streams from Twitch API
-            let featuredTwitchStreams = try await twitchAPI.getTopStreams(limit: 10)
-            
-            // Convert to FeaturedStream format
-            featuredStreams = featuredTwitchStreams.map { twitchStream in
-                FeaturedStream(
-                    id: twitchStream.id,
-                    title: twitchStream.userName,
-                    game: twitchStream.gameName ?? "Unknown",
-                    viewers: twitchStream.viewerCount,
-                    thumbnailURL: twitchStream.thumbnailUrl,
-                    platform: Platform.twitch,
-                    url: "https://twitch.tv/\(twitchStream.userLogin)"
-                )
-            }
-            
-            // Load trending streams
-            let trendingTwitchStreams = try await twitchAPI.getTopStreams(limit: 20, offset: 10)
-            
-            // Convert to TrendingStream format
-            trendingStreams = trendingTwitchStreams.map { twitchStream in
-                let category = mapGameToCategory(twitchStream.gameName ?? "Unknown")
-                return TrendingStream(
-                    id: twitchStream.id,
-                    title: twitchStream.userName,
-                    game: twitchStream.gameName ?? "Unknown",
-                    viewers: twitchStream.viewerCount,
-                    category: category,
-                    platform: Platform.twitch,
-                    url: "https://twitch.tv/\(twitchStream.userLogin)"
-                )
-            }
-            
-        } catch {
-            print("Failed to load streams: \(error)")
-            // Fall back to mock data if API fails
-            loadMockData()
+    private func performSearch() async {
+        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            discoveryService.searchResults = []
+            return
         }
         
-        isLoading = false
+        lastSearchQuery = searchText
+        await discoveryService.search(query: searchText, filters: searchFilters)
+    }
+    
+    private func loadDiscoverContent() async {
+        async let featuredTask: Void = discoveryService.loadFeaturedContent()
+        async let trendingTask: Void = discoveryService.loadTrendingContent()
+        async let categoriesTask: Void = discoveryService.loadPopularCategories()
+        
+        // Wait for all tasks to complete
+        _ = await (featuredTask, trendingTask, categoriesTask)
     }
     
     private func mapGameToCategory(_ gameName: String) -> StreamCategory {
@@ -437,48 +493,57 @@ struct DiscoverView: View {
         }
     }
     
-    private func loadMockData() {
-        featuredStreams = [
-            FeaturedStream(
-                id: "1",
-                title: "shroud",
-                game: "VALORANT",
-                viewers: 45000,
-                thumbnailURL: "https://example.com/thumb1.jpg",
-                platform: Platform.twitch,
-                url: "https://twitch.tv/shroud"
-            ),
-            FeaturedStream(
-                id: "2",
-                title: "pokimane",
-                game: "Just Chatting",
-                viewers: 32000,
-                thumbnailURL: "https://example.com/thumb2.jpg",
-                platform: Platform.twitch,
-                url: "https://twitch.tv/pokimane"
-            )
-        ]
+    private func mapDiscoveryCategoryToStreamCategory(_ discoveryCategory: StreamCategory) -> StreamCategory {
+        let name = discoveryCategory.displayName.lowercased()
         
-        trendingStreams = [
-            TrendingStream(
-                id: "1",
-                title: "xQc",
-                game: "Grand Theft Auto V",
-                viewers: 78000,
-                category: .gaming,
-                platform: Platform.twitch,
-                url: "https://twitch.tv/xqc"
-            ),
-            TrendingStream(
-                id: "2",
-                title: "Ninja",
-                game: "Fortnite",
-                viewers: 25000,
-                category: .gaming,
-                platform: Platform.twitch,
-                url: "https://twitch.tv/ninja"
-            )
-        ]
+        if name.contains("gaming") || name.contains("game") {
+            return .gaming
+        } else if name.contains("music") {
+            return .music
+        } else if name.contains("tech") || name.contains("science") {
+            return .tech
+        } else if name.contains("sport") {
+            return .sports
+        } else if name.contains("art") || name.contains("creative") {
+            return .art
+        } else if name.contains("chat") || name.contains("talk") {
+            return .chatting
+        } else {
+            return .all
+        }
+    }
+    
+    private func errorOverlay(_ error: StreamDiscoveryError) -> some View {
+        ZStack {
+            StreamyyyColors.overlay
+                .opacity(0.3)
+                .ignoresSafeArea()
+            
+            StreamyyyCard(style: .default, shadowStyle: .floating) {
+                VStack(spacing: StreamyyySpacing.md) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: StreamyyySpacing.iconSizeLG, weight: .medium))
+                        .foregroundColor(.orange)
+                    
+                    Text("Error Loading Content")
+                        .font(StreamyyyTypography.titleMedium)
+                        .foregroundColor(StreamyyyColors.textPrimary)
+                    
+                    Text(error.localizedDescription)
+                        .font(StreamyyyTypography.bodyMedium)
+                        .foregroundColor(StreamyyyColors.textSecondary)
+                        .multilineTextAlignment(.center)
+                    
+                    Button("Retry") {
+                        Task {
+                            await loadDiscoverContent()
+                        }
+                    }
+                    .buttonStyle(StreamyyyButton.Style.primary.small)
+                }
+                .padding(StreamyyySpacing.lg)
+            }
+        }
     }
 }
 
@@ -497,12 +562,399 @@ enum ViewMode: String, CaseIterable {
     }
 }
 
-// MARK: - Popular Category Model
-struct PopularCategory {
-    let name: String
-    let icon: String
-    let color: Color
-    let streamCount: Int
+// MARK: - Modern Discovered Stream Card
+struct ModernDiscoveredStreamCard: View {
+    let stream: DiscoveredStream
+    let style: CardStyle
+    var viewMode: ViewMode = .grid
+    let action: () -> Void
+    @State private var isPressed = false
+    
+    enum CardStyle {
+        case featured
+        case trending(rank: Int)
+        case search
+    }
+    
+    var body: some View {
+        StreamyyyCard(
+            style: .default,
+            shadowStyle: .default,
+            isInteractive: true,
+            onTap: {
+                StreamyyyDesignSystem.hapticFeedback(.medium)
+                action()
+            }
+        ) {
+            if viewMode == .grid {
+                gridLayout
+            } else {
+                listLayout
+            }
+        }
+        .scaleEffect(isPressed ? 0.98 : 1.0)
+        .animation(.easeInOut(duration: 0.1), value: isPressed)
+        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
+            isPressed = pressing
+        }, perform: {})
+    }
+    
+    private var gridLayout: some View {
+        VStack(alignment: .leading, spacing: StreamyyySpacing.sm) {
+            // Thumbnail
+            ZStack {
+                RoundedRectangle(cornerRadius: StreamyyySpacing.streamThumbnailCornerRadius)
+                    .fill(StreamyyyColors.surfaceSecondary)
+                    .aspectRatio(16/9, contentMode: .fit)
+                    .overlay(
+                        LinearGradient(
+                            colors: [Color.clear, StreamyyyColors.overlay.opacity(0.5)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .cornerRadius(StreamyyySpacing.streamThumbnailCornerRadius)
+                    )
+                
+                VStack(spacing: StreamyyySpacing.sm) {
+                    if case .trending(let rank) = style {
+                        Text("#\(rank)")
+                            .font(StreamyyyTypography.labelLarge)
+                            .fontWeight(.bold)
+                            .foregroundColor(StreamyyyColors.textInverse)
+                            .padding(.horizontal, StreamyyySpacing.sm)
+                            .padding(.vertical, StreamyyySpacing.xs)
+                            .background(StreamyyyColors.primary)
+                            .cornerRadius(StreamyyySpacing.cornerRadiusXS)
+                    }
+                    
+                    Image(systemName: "play.tv.fill")
+                        .font(.system(size: StreamyyySpacing.iconSizeLG, weight: .medium))
+                        .foregroundColor(StreamyyyColors.textInverse.opacity(0.8))
+                    
+                    if stream.isLive {
+                        HStack(spacing: StreamyyySpacing.xs) {
+                            Circle()
+                                .fill(StreamyyyColors.liveIndicator)
+                                .frame(width: 6, height: 6)
+                            
+                            Text("LIVE")
+                                .font(StreamyyyTypography.liveIndicator)
+                                .foregroundColor(StreamyyyColors.textInverse)
+                        }
+                        .padding(.horizontal, StreamyyySpacing.sm)
+                        .padding(.vertical, StreamyyySpacing.xs)
+                        .background(StreamyyyColors.overlay.opacity(0.8))
+                        .cornerRadius(StreamyyySpacing.cornerRadiusXS)
+                    }
+                }
+                
+                // Viewer count overlay
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Text(formatViewerCount(stream.viewerCount))
+                            .font(StreamyyyTypography.viewerCount)
+                            .foregroundColor(StreamyyyColors.textInverse)
+                            .padding(.horizontal, StreamyyySpacing.sm)
+                            .padding(.vertical, StreamyyySpacing.xs)
+                            .background(StreamyyyColors.overlay.opacity(0.8))
+                            .cornerRadius(StreamyyySpacing.cornerRadiusXS)
+                    }
+                }
+                .padding(StreamyyySpacing.sm)
+            }
+            
+            // Stream info
+            VStack(alignment: .leading, spacing: StreamyyySpacing.xs) {
+                Text(stream.title)
+                    .font(StreamyyyTypography.streamTitle)
+                    .foregroundColor(StreamyyyColors.textPrimary)
+                    .lineLimit(1)
+                
+                Text(stream.channelName)
+                    .font(StreamyyyTypography.gameTitle)
+                    .foregroundColor(StreamyyyColors.textSecondary)
+                    .lineLimit(1)
+                
+                if let category = stream.category {
+                    Text(category)
+                        .font(StreamyyyTypography.captionMedium)
+                        .foregroundColor(StreamyyyColors.textTertiary)
+                        .lineLimit(1)
+                }
+                
+                HStack(spacing: StreamyyySpacing.xs) {
+                    Circle()
+                        .fill(stream.platform.color)
+                        .frame(width: 8, height: 8)
+                    
+                    Text(stream.platform.displayName)
+                        .font(StreamyyyTypography.platformBadge)
+                        .foregroundColor(StreamyyyColors.textTertiary)
+                    
+                    Spacer()
+                    
+                    StreamyyyIconButton(
+                        icon: "plus.circle.fill",
+                        style: .ghost,
+                        size: .small
+                    ) {
+                        action()
+                    }
+                }
+            }
+        }
+    }
+    
+    private var listLayout: some View {
+        HStack(spacing: StreamyyySpacing.md) {
+            // Rank or platform icon
+            Group {
+                if case .trending(let rank) = style {
+                    Text("#\(rank)")
+                        .font(StreamyyyTypography.titleSmall)
+                        .fontWeight(.bold)
+                        .foregroundColor(StreamyyyColors.primary)
+                        .frame(width: 32)
+                } else {
+                    Image(systemName: stream.platform.icon)
+                        .font(.system(size: StreamyyySpacing.iconSizeMD, weight: .medium))
+                        .foregroundColor(stream.platform.color)
+                        .frame(width: 32)
+                }
+            }
+            
+            // Thumbnail
+            ZStack {
+                RoundedRectangle(cornerRadius: StreamyyySpacing.streamThumbnailCornerRadius)
+                    .fill(StreamyyyColors.surfaceSecondary)
+                    .frame(width: 80, height: 45) // 16:9 aspect ratio
+                
+                Image(systemName: "play.tv.fill")
+                    .font(.system(size: StreamyyySpacing.iconSizeMD, weight: .medium))
+                    .foregroundColor(StreamyyyColors.textInverse.opacity(0.8))
+                
+                if stream.isLive {
+                    VStack {
+                        HStack {
+                            Circle()
+                                .fill(StreamyyyColors.liveIndicator)
+                                .frame(width: 4, height: 4)
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .padding(4)
+                }
+            }
+            
+            // Stream info
+            VStack(alignment: .leading, spacing: StreamyyySpacing.xs) {
+                Text(stream.title)
+                    .font(StreamyyyTypography.streamTitle)
+                    .foregroundColor(StreamyyyColors.textPrimary)
+                    .lineLimit(1)
+                
+                Text(stream.channelName)
+                    .font(StreamyyyTypography.gameTitle)
+                    .foregroundColor(StreamyyyColors.textSecondary)
+                    .lineLimit(1)
+                
+                if let category = stream.category {
+                    Text(category)
+                        .font(StreamyyyTypography.captionMedium)
+                        .foregroundColor(StreamyyyColors.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+            
+            Spacer()
+            
+            // Viewers and add button
+            VStack(alignment: .trailing, spacing: StreamyyySpacing.xs) {
+                Text(formatViewerCount(stream.viewerCount))
+                    .font(StreamyyyTypography.viewerCount)
+                    .foregroundColor(StreamyyyColors.textSecondary)
+                
+                StreamyyyIconButton(
+                    icon: "plus.circle.fill",
+                    style: .ghost,
+                    size: .small
+                ) {
+                    action()
+                }
+            }
+        }
+    }
+    
+    private func formatViewerCount(_ count: Int) -> String {
+        if count >= 1000000 {
+            return String(format: "%.1fM", Double(count) / 1000000.0)
+        } else if count >= 1000 {
+            return String(format: "%.1fK", Double(count) / 1000.0)
+        } else {
+            return "\(count)"
+        }
+    }
+}
+
+// MARK: - Search Result Card
+struct SearchResultCard: View {
+    let stream: DiscoveredStream
+    let rank: Int
+    let action: () -> Void
+    
+    var body: some View {
+        ModernDiscoveredStreamCard(
+            stream: stream,
+            style: .search,
+            viewMode: .list,
+            action: action
+        )
+    }
+}
+
+// MARK: - Modern Category Card
+struct ModernCategoryCard: View {
+    let category: StreamCategory
+    let action: () -> Void
+    @State private var isPressed = false
+    
+    var body: some View {
+        Button(action: {
+            StreamyyyDesignSystem.hapticFeedback(.medium)
+            action()
+        }) {
+            StreamyyyCard(style: .default, shadowStyle: .default) {
+                VStack(spacing: StreamyyySpacing.md) {
+                    // Icon with background
+                    ZStack {
+                        Circle()
+                            .fill(category.color.opacity(0.1))
+                            .frame(width: 48, height: 48)
+                        
+                        Image(systemName: category.icon)
+                            .font(.system(size: StreamyyySpacing.iconSizeLG, weight: .medium))
+                            .foregroundColor(category.color)
+                    }
+                    
+                    VStack(spacing: StreamyyySpacing.xs) {
+                        Text(category.displayName)
+                            .font(StreamyyyTypography.titleSmall)
+                            .foregroundColor(StreamyyyColors.textPrimary)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(isPressed ? 0.95 : 1.0)
+        .animation(.easeInOut(duration: 0.1), value: isPressed)
+        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
+            isPressed = pressing
+        }, perform: {})
+        .accessibilityLabel("\(category.displayName) category")
+        .accessibilityHint("Tap to browse this category.")
+    }
+}
+
+// MARK: - Search Filters View
+struct SearchFiltersView: View {
+    @Binding var filters: SearchFilters
+    let onApply: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Platforms") {
+                    ForEach(Platform.popularPlatforms, id: \.self) { platform in
+                        HStack {
+                            Image(systemName: platform.icon)
+                                .foregroundColor(platform.color)
+                                .frame(width: 24)
+                            
+                            Text(platform.displayName)
+                            
+                            Spacer()
+                            
+                            if filters.platforms?.contains(platform) == true {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            togglePlatform(platform)
+                        }
+                    }
+                }
+                
+                Section("Content") {
+                    Toggle("Live streams only", isOn: $filters.liveOnly)
+                    Toggle("Include mature content", isOn: $filters.includeNSFW)
+                }
+                
+                Section("Viewer Count") {
+                    HStack {
+                        Text("Minimum:")
+                        Spacer()
+                        TextField("0", value: $filters.minViewers, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                    }
+                    
+                    HStack {
+                        Text("Maximum:")
+                        Spacer()
+                        TextField("No limit", value: $filters.maxViewers, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                    }
+                }
+                
+                Section("Sort By") {
+                    Picker("Sort Option", selection: $filters.sortBy) {
+                        ForEach(SearchFilters.SortOption.allCases, id: \.self) { option in
+                            Text(option.displayName).tag(option)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+            .navigationTitle("Search Filters")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Apply") {
+                        onApply()
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func togglePlatform(_ platform: Platform) {
+        if filters.platforms == nil {
+            filters.platforms = Set([platform])
+        } else if filters.platforms!.contains(platform) {
+            filters.platforms!.remove(platform)
+            if filters.platforms!.isEmpty {
+                filters.platforms = nil
+            }
+        } else {
+            filters.platforms!.insert(platform)
+        }
+    }
 }
 
 // MARK: - Modern Category Chip
@@ -539,369 +991,7 @@ struct ModernCategoryChip: View {
     }
 }
 
-// MARK: - Modern Featured Stream Card
-struct ModernFeaturedStreamCard: View {
-    let stream: FeaturedStream
-    let action: () -> Void
-    @State private var isPressed = false
-    
-    var body: some View {
-        Button(action: {
-            StreamyyyDesignSystem.hapticFeedback(.medium)
-            action()
-        }) {
-            VStack(alignment: .leading, spacing: StreamyyySpacing.sm) {
-                // Thumbnail with overlay
-                ZStack {
-                    RoundedRectangle(cornerRadius: StreamyyySpacing.streamThumbnailCornerRadius)
-                        .fill(StreamyyyColors.surfaceSecondary)
-                        .frame(width: 280, height: 157) // 16:9 aspect ratio
-                        .overlay(
-                            // Gradient overlay for better text readability
-                            LinearGradient(
-                                colors: [Color.clear, StreamyyyColors.overlay.opacity(0.6)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .cornerRadius(StreamyyySpacing.streamThumbnailCornerRadius)
-                        )
-                    
-                    // Placeholder content
-                    VStack(spacing: StreamyyySpacing.sm) {
-                        Image(systemName: "play.tv.fill")
-                            .font(.system(size: StreamyyySpacing.iconSizeXL, weight: .medium))
-                            .foregroundColor(StreamyyyColors.textInverse.opacity(0.8))
-                        
-                        HStack(spacing: StreamyyySpacing.xs) {
-                            Circle()
-                                .fill(StreamyyyColors.liveIndicator)
-                                .frame(width: 6, height: 6)
-                            
-                            Text("LIVE")
-                                .font(StreamyyyTypography.liveIndicator)
-                                .foregroundColor(StreamyyyColors.textInverse)
-                        }
-                        .padding(.horizontal, StreamyyySpacing.sm)
-                        .padding(.vertical, StreamyyySpacing.xs)
-                        .background(StreamyyyColors.overlay.opacity(0.8))
-                        .cornerRadius(StreamyyySpacing.cornerRadiusXS)
-                    }
-                    
-                    // Viewer count overlay
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            
-                            Text(formatViewerCount(stream.viewers))
-                                .font(StreamyyyTypography.viewerCount)
-                                .foregroundColor(StreamyyyColors.textInverse)
-                                .padding(.horizontal, StreamyyySpacing.sm)
-                                .padding(.vertical, StreamyyySpacing.xs)
-                                .background(StreamyyyColors.overlay.opacity(0.8))
-                                .cornerRadius(StreamyyySpacing.cornerRadiusXS)
-                        }
-                    }
-                    .padding(StreamyyySpacing.sm)
-                }
-                
-                // Stream info
-                VStack(alignment: .leading, spacing: StreamyyySpacing.xs) {
-                    Text(stream.title)
-                        .font(StreamyyyTypography.streamTitle)
-                        .foregroundColor(StreamyyyColors.textPrimary)
-                        .lineLimit(1)
-                    
-                    Text(stream.game)
-                        .font(StreamyyyTypography.gameTitle)
-                        .foregroundColor(StreamyyyColors.textSecondary)
-                        .lineLimit(1)
-                    
-                    HStack(spacing: StreamyyySpacing.xs) {
-                        Circle()
-                            .fill(stream.platform.color)
-                            .frame(width: 10, height: 10)
-                        
-                        Text(stream.platform.displayName)
-                            .font(StreamyyyTypography.platformBadge)
-                            .foregroundColor(StreamyyyColors.textTertiary)
-                    }
-                }
-                .frame(width: 280, alignment: .leading)
-            }
-        }
-        .buttonStyle(.plain)
-        .scaleEffect(isPressed ? 0.95 : 1.0)
-        .animation(.easeInOut(duration: 0.1), value: isPressed)
-        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
-            isPressed = pressing
-        }, perform: {})
-        .accessibilityLabel("Featured stream: \(stream.title)")
-        .accessibilityHint("Streaming \(stream.game) with \(formatViewerCount(stream.viewers)) viewers. Tap to add to your multistream.")
-    }
-    
-    private func formatViewerCount(_ count: Int) -> String {
-        if count >= 1000000 {
-            return String(format: "%.1fM", Double(count) / 1000000.0)
-        } else if count >= 1000 {
-            return String(format: "%.1fK", Double(count) / 1000.0)
-        } else {
-            return "\(count)"
-        }
-    }
-}
-
-// MARK: - Modern Trending Stream Card
-struct ModernTrendingStreamCard: View {
-    let stream: TrendingStream
-    let rank: Int
-    let viewMode: ViewMode
-    let action: () -> Void
-    @State private var isPressed = false
-    
-    var body: some View {
-        StreamyyyCard(
-            style: .default,
-            shadowStyle: .default,
-            isInteractive: true,
-            onTap: {
-                StreamyyyDesignSystem.hapticFeedback(.medium)
-                action()
-            }
-        ) {
-            if viewMode == .grid {
-                gridLayout
-            } else {
-                listLayout
-            }
-        }
-        .scaleEffect(isPressed ? 0.98 : 1.0)
-        .animation(.easeInOut(duration: 0.1), value: isPressed)
-        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
-            isPressed = pressing
-        }, perform: {})
-        .accessibilityLabel("Trending stream #\(rank): \(stream.title)")
-        .accessibilityHint("Streaming \(stream.game) with \(formatViewerCount(stream.viewers)) viewers. Tap to add to your multistream.")
-    }
-    
-    private var gridLayout: some View {
-        VStack(alignment: .leading, spacing: StreamyyySpacing.sm) {
-            // Thumbnail placeholder
-            ZStack {
-                RoundedRectangle(cornerRadius: StreamyyySpacing.streamThumbnailCornerRadius)
-                    .fill(StreamyyyColors.surfaceSecondary)
-                    .aspectRatio(16/9, contentMode: .fit)
-                    .overlay(
-                        LinearGradient(
-                            colors: [Color.clear, StreamyyyColors.overlay.opacity(0.5)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .cornerRadius(StreamyyySpacing.streamThumbnailCornerRadius)
-                    )
-                
-                VStack(spacing: StreamyyySpacing.sm) {
-                    // Rank badge
-                    Text("#\(rank)")
-                        .font(StreamyyyTypography.labelLarge)
-                        .fontWeight(.bold)
-                        .foregroundColor(StreamyyyColors.textInverse)
-                        .padding(.horizontal, StreamyyySpacing.sm)
-                        .padding(.vertical, StreamyyySpacing.xs)
-                        .background(StreamyyyColors.primary)
-                        .cornerRadius(StreamyyySpacing.cornerRadiusXS)
-                    
-                    Image(systemName: "play.tv.fill")
-                        .font(.system(size: StreamyyySpacing.iconSizeLG, weight: .medium))
-                        .foregroundColor(StreamyyyColors.textInverse.opacity(0.8))
-                }
-                
-                // Viewer count overlay
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        Text(formatViewerCount(stream.viewers))
-                            .font(StreamyyyTypography.viewerCount)
-                            .foregroundColor(StreamyyyColors.textInverse)
-                            .padding(.horizontal, StreamyyySpacing.sm)
-                            .padding(.vertical, StreamyyySpacing.xs)
-                            .background(StreamyyyColors.overlay.opacity(0.8))
-                            .cornerRadius(StreamyyySpacing.cornerRadiusXS)
-                    }
-                }
-                .padding(StreamyyySpacing.sm)
-            }
-            
-            // Stream info
-            VStack(alignment: .leading, spacing: StreamyyySpacing.xs) {
-                Text(stream.title)
-                    .font(StreamyyyTypography.streamTitle)
-                    .foregroundColor(StreamyyyColors.textPrimary)
-                    .lineLimit(1)
-                
-                Text(stream.game)
-                    .font(StreamyyyTypography.gameTitle)
-                    .foregroundColor(StreamyyyColors.textSecondary)
-                    .lineLimit(1)
-                
-                HStack(spacing: StreamyyySpacing.xs) {
-                    Circle()
-                        .fill(stream.platform.color)
-                        .frame(width: 8, height: 8)
-                    
-                    Text(stream.platform.displayName)
-                        .font(StreamyyyTypography.platformBadge)
-                        .foregroundColor(StreamyyyColors.textTertiary)
-                    
-                    Spacer()
-                    
-                    StreamyyyIconButton(
-                        icon: "plus.circle.fill",
-                        style: .ghost,
-                        size: .small
-                    ) {
-                        action()
-                    }
-                }
-            }
-        }
-    }
-    
-    private var listLayout: some View {
-        HStack(spacing: StreamyyySpacing.md) {
-            // Rank
-            Text("#\(rank)")
-                .font(StreamyyyTypography.titleSmall)
-                .fontWeight(.bold)
-                .foregroundColor(StreamyyyColors.primary)
-                .frame(width: 32)
-            
-            // Thumbnail placeholder
-            ZStack {
-                RoundedRectangle(cornerRadius: StreamyyySpacing.streamThumbnailCornerRadius)
-                    .fill(StreamyyyColors.surfaceSecondary)
-                    .frame(width: 80, height: 45) // 16:9 aspect ratio
-                
-                Image(systemName: "play.tv.fill")
-                    .font(.system(size: StreamyyySpacing.iconSizeMD, weight: .medium))
-                    .foregroundColor(StreamyyyColors.textInverse.opacity(0.8))
-            }
-            
-            // Stream info
-            VStack(alignment: .leading, spacing: StreamyyySpacing.xs) {
-                Text(stream.title)
-                    .font(StreamyyyTypography.streamTitle)
-                    .foregroundColor(StreamyyyColors.textPrimary)
-                    .lineLimit(1)
-                
-                Text(stream.game)
-                    .font(StreamyyyTypography.gameTitle)
-                    .foregroundColor(StreamyyyColors.textSecondary)
-                    .lineLimit(1)
-                
-                HStack(spacing: StreamyyySpacing.xs) {
-                    Circle()
-                        .fill(stream.platform.color)
-                        .frame(width: 8, height: 8)
-                    
-                    Text(stream.platform.displayName)
-                        .font(StreamyyyTypography.platformBadge)
-                        .foregroundColor(StreamyyyColors.textTertiary)
-                }
-            }
-            
-            Spacer()
-            
-            // Viewers and add button
-            VStack(alignment: .trailing, spacing: StreamyyySpacing.xs) {
-                Text(formatViewerCount(stream.viewers))
-                    .font(StreamyyyTypography.viewerCount)
-                    .foregroundColor(StreamyyyColors.textSecondary)
-                
-                StreamyyyIconButton(
-                    icon: "plus.circle.fill",
-                    style: .ghost,
-                    size: .small
-                ) {
-                    action()
-                }
-            }
-        }
-    }
-    
-    private func formatViewerCount(_ count: Int) -> String {
-        if count >= 1000000 {
-            return String(format: "%.1fM", Double(count) / 1000000.0)
-        } else if count >= 1000 {
-            return String(format: "%.1fK", Double(count) / 1000.0)
-        } else {
-            return "\(count)"
-        }
-    }
-}
-
-// MARK: - Modern Category Card
-struct ModernCategoryCard: View {
-    let name: String
-    let icon: String
-    let color: Color
-    let streamCount: Int
-    let action: () -> Void
-    @State private var isPressed = false
-    
-    var body: some View {
-        Button(action: {
-            StreamyyyDesignSystem.hapticFeedback(.medium)
-            action()
-        }) {
-            StreamyyyCard(style: .default, shadowStyle: .default) {
-                VStack(spacing: StreamyyySpacing.md) {
-                    // Icon with background
-                    ZStack {
-                        Circle()
-                            .fill(color.opacity(0.1))
-                            .frame(width: 48, height: 48)
-                        
-                        Image(systemName: icon)
-                            .font(.system(size: StreamyyySpacing.iconSizeLG, weight: .medium))
-                            .foregroundColor(color)
-                    }
-                    
-                    VStack(spacing: StreamyyySpacing.xs) {
-                        Text(name)
-                            .font(StreamyyyTypography.titleSmall)
-                            .foregroundColor(StreamyyyColors.textPrimary)
-                            .multilineTextAlignment(.center)
-                        
-                        Text("\(formatCount(streamCount)) streams")
-                            .font(StreamyyyTypography.captionMedium)
-                            .foregroundColor(StreamyyyColors.textSecondary)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .buttonStyle(.plain)
-        .scaleEffect(isPressed ? 0.95 : 1.0)
-        .animation(.easeInOut(duration: 0.1), value: isPressed)
-        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
-            isPressed = pressing
-        }, perform: {})
-        .accessibilityLabel("\(name) category")
-        .accessibilityHint("\(streamCount) streams available. Tap to browse this category.")
-    }
-    
-    private func formatCount(_ count: Int) -> String {
-        if count >= 1000 {
-            return String(format: "%.1fK", Double(count) / 1000.0)
-        } else {
-            return "\(count)"
-        }
-    }
-}
-
-// MARK: - Models
+// MARK: - Legacy Models (for compatibility)
 enum StreamCategory: String, CaseIterable {
     case all = "All"
     case gaming = "Gaming"
@@ -926,26 +1016,6 @@ enum StreamCategory: String, CaseIterable {
         case .chatting: return "bubble.left.and.bubble.right"
         }
     }
-}
-
-struct FeaturedStream {
-    let id: String
-    let title: String
-    let game: String
-    let viewers: Int
-    let thumbnailURL: String
-    let platform: Platform
-    let url: String
-}
-
-struct TrendingStream {
-    let id: String
-    let title: String
-    let game: String
-    let viewers: Int
-    let category: StreamCategory
-    let platform: Platform
-    let url: String
 }
 
 #Preview {

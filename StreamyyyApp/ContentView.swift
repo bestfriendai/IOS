@@ -326,7 +326,10 @@ struct MainAppTabView: View {
 
 // MARK: - Tab Views
 struct DiscoverTabView: View {
+    @StateObject private var twitchService = RealTwitchAPIService.shared
     @State private var searchText = ""
+    @State private var featuredStreams: [TwitchStream] = []
+    @State private var isLoading = false
     
     var body: some View {
         NavigationView {
@@ -361,12 +364,76 @@ struct DiscoverTabView: View {
                             TextField("Search streams...", text: $searchText)
                                 .textFieldStyle(PlainTextFieldStyle())
                                 .foregroundColor(.white)
+                                .submitLabel(.search)
+                                .onSubmit {
+                                    searchStreams()
+                                }
                         }
                         .padding()
                         .background(
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(.ultraThinMaterial)
                         )
+                        
+                        // Featured Streams Section
+                        VStack(spacing: 16) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(searchText.isEmpty ? "Top Live Streams" : "Search Results")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                    if !featuredStreams.isEmpty {
+                                        Text("\(featuredStreams.count) streams")
+                                            .font(.caption)
+                                            .foregroundColor(.white.opacity(0.6))
+                                    }
+                                }
+                                Spacer()
+                                Button(action: {
+                                    if searchText.isEmpty {
+                                        loadFeaturedStreams()
+                                    } else {
+                                        searchStreams()
+                                    }
+                                }) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .foregroundColor(.cyan)
+                                }
+                            }
+                            
+                            if isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
+                                    .frame(height: 100)
+                            } else if featuredStreams.isEmpty {
+                                VStack(spacing: 16) {
+                                    Image(systemName: "tv.slash")
+                                        .font(.system(size: 48))
+                                        .foregroundColor(.white.opacity(0.4))
+                                    
+                                    VStack(spacing: 8) {
+                                        Text(searchText.isEmpty ? "No streams available" : "No results found")
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                        
+                                        Text(searchText.isEmpty ? "Try refreshing or check back later" : "Try a different search term")
+                                            .font(.subheadline)
+                                            .foregroundColor(.white.opacity(0.6))
+                                            .multilineTextAlignment(.center)
+                                    }
+                                }
+                                .frame(height: 150)
+                            } else {
+                                LazyVGrid(columns: [
+                                    GridItem(.flexible()),
+                                    GridItem(.flexible())
+                                ], spacing: 12) {
+                                    ForEach(featuredStreams, id: \.id) { stream in
+                                        TwitchStreamCard(stream: stream)
+                                    }
+                                }
+                            }
+                        }
                         
                         // Quick actions
                         VStack(spacing: 16) {
@@ -395,56 +462,244 @@ struct DiscoverTabView: View {
                 }
             }
             .navigationBarHidden(true)
+            .onAppear {
+                loadFeaturedStreams()
+            }
+        }
+    }
+    
+    private func searchStreams() {
+        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            loadFeaturedStreams()
+            return
+        }
+        
+        isLoading = true
+        Task {
+            // For now, we'll filter the current streams by search text
+            // In a real implementation, you might want to call a search API
+            let result = await twitchService.getTopStreams(first: 100)
+            let filtered = result.streams.filter { stream in
+                stream.title.localizedCaseInsensitiveContains(searchText) ||
+                stream.userName.localizedCaseInsensitiveContains(searchText) ||
+                stream.gameName.localizedCaseInsensitiveContains(searchText)
+            }
+            
+            await MainActor.run {
+                featuredStreams = filtered
+                isLoading = false
+            }
+        }
+    }
+    
+    private func loadFeaturedStreams() {
+        isLoading = true
+        Task {
+            let result = await twitchService.getTopStreams(first: 20)
+            await MainActor.run {
+                featuredStreams = result.streams
+                isLoading = false
+            }
         }
     }
 }
 
 struct MultiStreamTabView: View {
+    @State private var streamSlots: [StreamSlot] = Array(repeating: StreamSlot(), count: 4)
+    @State private var currentLayout: LayoutType = .grid2x2
+    @State private var showingStreamPicker = false
+    @State private var selectedSlotIndex = 0
+    @State private var showingFullscreen = false
+    @State private var fullscreenSlot: StreamSlot?
+    
+    enum LayoutType {
+        case single, grid2x2, grid3x3, pip
+        
+        var gridColumns: Int {
+            switch self {
+            case .single: return 1
+            case .grid2x2: return 2
+            case .grid3x3: return 3
+            case .pip: return 2
+            }
+        }
+        
+        var slotCount: Int {
+            switch self {
+            case .single: return 1
+            case .grid2x2: return 4
+            case .grid3x3: return 9
+            case .pip: return 2
+            }
+        }
+    }
+    
     var body: some View {
         NavigationView {
             ZStack {
                 Color.black.ignoresSafeArea()
                 
-                VStack {
-                    Text("Multi-Stream Viewer")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
+                VStack(spacing: 0) {
+                    // Layout Controls
+                    HStack {
+                        Text("Multi-Stream")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
+                        Spacer()
+                        
+                        // Layout picker
+                        HStack(spacing: 8) {
+                            LayoutButton(layout: .grid2x2, current: currentLayout) {
+                                currentLayout = .grid2x2
+                                updateStreamSlots()
+                            }
+                            LayoutButton(layout: .grid3x3, current: currentLayout) {
+                                currentLayout = .grid3x3
+                                updateStreamSlots()
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 8)
                     
-                    Text("Advanced multi-streaming features coming soon!")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                    
-                    Spacer()
+                    // Stream Grid
+                    GeometryReader { geometry in
+                        let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: currentLayout.gridColumns)
+                        
+                        ScrollView {
+                            LazyVGrid(columns: columns, spacing: 4) {
+                                ForEach(0..<currentLayout.slotCount, id: \.self) { index in
+                                    StreamSlotView(
+                                        slot: index < streamSlots.count ? streamSlots[index] : StreamSlot(),
+                                        onTap: {
+                                            selectedSlotIndex = index
+                                            showingStreamPicker = true
+                                        }
+                                    )
+                                    .aspectRatio(16/9, contentMode: .fit)
+                                }
+                            }
+                            .padding(8)
+                        }
+                    }
                 }
-                .padding()
             }
             .navigationBarHidden(true)
+            .sheet(isPresented: $showingStreamPicker) {
+                StreamPickerView(selectedSlot: $selectedSlotIndex, streamSlots: $streamSlots)
+            }
+        }
+    }
+    
+    private func updateStreamSlots() {
+        let neededSlots = currentLayout.slotCount
+        if streamSlots.count < neededSlots {
+            streamSlots.append(contentsOf: Array(repeating: StreamSlot(), count: neededSlots - streamSlots.count))
         }
     }
 }
 
 struct LibraryTabView: View {
+    @State private var favorites: [ContentViewStream] = ContentViewStream.sampleStreams.prefix(3).map { $0 }
+    @State private var recentStreams: [ContentViewStream] = ContentViewStream.sampleStreams.suffix(2).map { $0 }
+    
     var body: some View {
         NavigationView {
             ZStack {
                 Color.black.ignoresSafeArea()
                 
-                VStack {
-                    Text("Library")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                    
-                    Text("Your saved streams and favorites")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
-                    
-                    Spacer()
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Library")
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                            
+                            Text("Your saved streams and viewing history")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        // Favorites Section
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Favorites")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Text("\(favorites.count) streams")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            
+                            LazyVGrid(columns: [
+                                GridItem(.flexible()),
+                                GridItem(.flexible())
+                            ], spacing: 12) {
+                                ForEach(favorites, id: \.id) { stream in
+                                    ContentStreamCard(stream: stream)
+                                }
+                            }
+                        }
+                        
+                        // Recent Section
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("Recently Watched")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+                            
+                            VStack(spacing: 12) {
+                                ForEach(recentStreams, id: \.id) { stream in
+                                    HStack {
+                                        AsyncImage(url: URL(string: stream.thumbnailUrl)) { image in
+                                            image
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fill)
+                                        } placeholder: {
+                                            Rectangle()
+                                                .fill(Color.gray.opacity(0.3))
+                                        }
+                                        .frame(width: 80, height: 45)
+                                        .cornerRadius(8)
+                                        
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(stream.title)
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                                .foregroundColor(.white)
+                                                .lineLimit(2)
+                                            
+                                            Text(stream.streamerName)
+                                                .font(.caption)
+                                                .foregroundColor(.white.opacity(0.7))
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        Text("\(stream.viewerCount) viewers")
+                                            .font(.caption)
+                                            .foregroundColor(.white.opacity(0.6))
+                                    }
+                                    .padding()
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(.ultraThinMaterial)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
                 }
-                .padding()
             }
             .navigationBarHidden(true)
         }
@@ -452,64 +707,92 @@ struct LibraryTabView: View {
 }
 
 struct ProfileTabView: View {
+    @State private var showingSettings = false
+    @State private var showingAuth = false
+    
     var body: some View {
         NavigationView {
             ZStack {
                 Color.black.ignoresSafeArea()
                 
-                VStack(spacing: 24) {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.purple, Color.cyan],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 80, height: 80)
-                        .overlay(
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 32, weight: .medium))
-                                .foregroundColor(.white)
-                        )
-                    
-                    VStack(spacing: 8) {
-                        Text("Guest User")
-                            .font(.title2)
-                            .fontWeight(.bold)
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Profile Header
+                        VStack(spacing: 16) {
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.purple, Color.cyan],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 80, height: 80)
+                                .overlay(
+                                    Image(systemName: "person.fill")
+                                        .font(.system(size: 32, weight: .medium))
+                                        .foregroundColor(.white)
+                                )
+                            
+                            VStack(spacing: 8) {
+                                Text("Guest User")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                
+                                Text("Sign in to sync your streams across devices")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .multilineTextAlignment(.center)
+                            }
+                        }
+                        
+                        // Action Buttons
+                        VStack(spacing: 12) {
+                            Button("Sign In") {
+                                showingAuth = true
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.purple)
                             .foregroundColor(.white)
-                        
-                        Text("Sign in to personalize your experience")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                    }
-                    
-                    VStack(spacing: 12) {
-                        Button("Sign In") {
-                            // TODO: Implement sign in
+                            .cornerRadius(12)
+                            
+                            Button("Settings") {
+                                showingSettings = true
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.white.opacity(0.1))
+                            .foregroundColor(.white)
+                            .cornerRadius(12)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.purple)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
                         
-                        Button("Settings") {
-                            // TODO: Implement settings
+                        // Stats Section
+                        VStack(spacing: 16) {
+                            Text("Your Stats")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            
+                            HStack {
+                                StatCard(title: "Streams Watched", value: "24")
+                                StatCard(title: "Hours Watched", value: "12.5")
+                                StatCard(title: "Favorites", value: "8")
+                            }
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
                     }
-                    
-                    Spacer()
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
                 }
-                .padding()
             }
             .navigationBarHidden(true)
+            .sheet(isPresented: $showingAuth) {
+                AuthenticationSheet()
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsSheet()
+            }
         }
     }
 }
@@ -550,6 +833,676 @@ struct QuickActionCard: View {
 struct ModernMainView: View {
     var body: some View {
         MainAppTabView()
+    }
+}
+
+// MARK: - Supporting Types and Views
+
+import WebKit
+
+struct TwitchStreamPlayer: UIViewRepresentable {
+    let channelName: String
+    @Binding var isMuted: Bool
+    
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
+        configuration.allowsPictureInPictureMediaPlayback = false
+        configuration.preferences.javaScriptEnabled = true
+        
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isOpaque = false
+        webView.backgroundColor = UIColor.black
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        
+        // Create the Twitch embed HTML
+        let embedHTML = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <style>
+                body, html {
+                    margin: 0;
+                    padding: 0;
+                    width: 100%;
+                    height: 100%;
+                    background-color: #000;
+                    overflow: hidden;
+                }
+                iframe {
+                    width: 100%;
+                    height: 100%;
+                    border: none;
+                }
+            </style>
+        </head>
+        <body>
+            <iframe
+                src="https://player.twitch.tv/?channel=\\(channelName)&parent=localhost&autoplay=true&muted=\\(isMuted)"
+                allowfullscreen>
+            </iframe>
+        </body>
+        </html>
+        """
+        
+        webView.loadHTMLString(embedHTML, baseURL: URL(string: "https://localhost"))
+        return webView
+    }
+    
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        // Update mute state if needed
+        let muteJS = "document.querySelector('iframe').contentWindow.postMessage({type: 'setMuted', data: \\(isMuted)}, '*');"
+        webView.evaluateJavaScript(muteJS, completionHandler: nil)
+    }
+}
+
+struct ContentViewStream {
+    let id = UUID()
+    let title: String
+    let streamerName: String
+    let category: String
+    let viewerCount: Int
+    let thumbnailUrl: String
+    let platform: String
+    
+    static let sampleStreams = [
+        ContentViewStream(title: "Just Chatting with the Community", streamerName: "Ninja", category: "Just Chatting", viewerCount: 45000, thumbnailUrl: "https://picsum.photos/320/180?random=1", platform: "twitch"),
+        ContentViewStream(title: "Valorant Ranked Grind", streamerName: "Pokimane", category: "Valorant", viewerCount: 32000, thumbnailUrl: "https://picsum.photos/320/180?random=2", platform: "twitch"),
+        ContentViewStream(title: "Minecraft Build Battle", streamerName: "xQc", category: "Minecraft", viewerCount: 28000, thumbnailUrl: "https://picsum.photos/320/180?random=3", platform: "twitch"),
+        ContentViewStream(title: "Speedrun Practice", streamerName: "Shroud", category: "Super Mario 64", viewerCount: 15000, thumbnailUrl: "https://picsum.photos/320/180?random=4", platform: "twitch"),
+        ContentViewStream(title: "Art Stream - Digital Painting", streamerName: "DisguisedToast", category: "Art", viewerCount: 12000, thumbnailUrl: "https://picsum.photos/320/180?random=5", platform: "twitch"),
+        ContentViewStream(title: "League of Legends Coaching", streamerName: "Amouranth", category: "League of Legends", viewerCount: 8000, thumbnailUrl: "https://picsum.photos/320/180?random=6", platform: "twitch")
+    ]
+}
+
+struct StreamSlot {
+    var stream: ContentViewStream?
+    var twitchStream: TwitchStream?
+    var isActive: Bool = false
+    var volume: Double = 1.0
+    
+    var hasStream: Bool {
+        return stream != nil || twitchStream != nil
+    }
+    
+    var displayTitle: String {
+        return twitchStream?.title ?? stream?.title ?? ""
+    }
+    
+    var displayStreamer: String {
+        return twitchStream?.userName ?? stream?.streamerName ?? ""
+    }
+    
+    var displayViewerCount: Int {
+        return twitchStream?.viewerCount ?? stream?.viewerCount ?? 0
+    }
+    
+    var displayThumbnail: String {
+        return twitchStream?.thumbnailUrlMedium ?? stream?.thumbnailUrl ?? ""
+    }
+    
+    init(stream: ContentViewStream? = nil, twitchStream: TwitchStream? = nil, isActive: Bool = false, volume: Double = 1.0) {
+        self.stream = stream
+        self.twitchStream = twitchStream
+        self.isActive = isActive
+        self.volume = volume
+    }
+}
+
+struct TwitchStreamCard: View {
+    let stream: TwitchStream
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Thumbnail
+            AsyncImage(url: URL(string: stream.thumbnailUrlMedium)) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .overlay(
+                        Image(systemName: "tv")
+                            .font(.title2)
+                            .foregroundColor(.white.opacity(0.6))
+                    )
+            }
+            .frame(height: 100)
+            .cornerRadius(8)
+            .clipped()
+            
+            // Stream Info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(stream.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                
+                Text(stream.userName)
+                    .font(.caption)
+                    .foregroundColor(.purple)
+                
+                HStack {
+                    Text(stream.gameName)
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.7))
+                    
+                    Spacer()
+                    
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(.red)
+                            .frame(width: 6, height: 6)
+                        Text(stream.formattedViewerCount)
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+        )
+    }
+}
+
+struct ContentStreamCard: View {
+    let stream: ContentViewStream
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Thumbnail
+            AsyncImage(url: URL(string: stream.thumbnailUrl)) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .overlay(
+                        Image(systemName: "tv")
+                            .font(.title2)
+                            .foregroundColor(.white.opacity(0.6))
+                    )
+            }
+            .frame(height: 100)
+            .cornerRadius(8)
+            .clipped()
+            
+            // Stream Info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(stream.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                
+                Text(stream.streamerName)
+                    .font(.caption)
+                    .foregroundColor(.purple)
+                
+                HStack {
+                    Text(stream.category)
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.7))
+                    
+                    Spacer()
+                    
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(.red)
+                            .frame(width: 6, height: 6)
+                        Text("\(stream.viewerCount)")
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+        )
+    }
+}
+
+struct StreamSlotView: View {
+    let slot: StreamSlot
+    let onTap: () -> Void
+    @State private var isMuted: Bool
+    @State private var showOverlay = true
+    
+    init(slot: StreamSlot, onTap: @escaping () -> Void) {
+        self.slot = slot
+        self.onTap = onTap
+        self._isMuted = State(initialValue: slot.volume == 0)
+    }
+    
+    var body: some View {
+        ZStack {
+            if slot.hasStream {
+                // Active stream slot with video playback
+                ZStack {
+                    // Video player
+                    if let twitchStream = slot.twitchStream {
+                        TwitchStreamPlayer(
+                            channelName: twitchStream.userLogin,
+                            isMuted: $isMuted
+                        )
+                        .clipped()
+                    } else if let stream = slot.stream {
+                        // Fallback to thumbnail for non-Twitch streams
+                        AsyncImage(url: URL(string: stream.thumbnailUrl)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.3))
+                                .overlay(
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white.opacity(0.6)))
+                                )
+                        }
+                        .clipped()
+                    }
+                    
+                    // Tap gesture overlay (transparent)
+                    Rectangle()
+                        .fill(Color.clear)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                showOverlay.toggle()
+                            }
+                        }
+                    
+                    // Stream info overlay (shows/hides on tap)
+                    if showOverlay {
+                        VStack {
+                            // Live indicator
+                            HStack {
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(.red)
+                                        .frame(width: 6, height: 6)
+                                    Text("LIVE")
+                                        .font(.caption2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.black.opacity(0.7))
+                                .cornerRadius(4)
+                                
+                                Spacer()
+                                
+                                // Controls
+                                HStack(spacing: 8) {
+                                    Button {
+                                        isMuted.toggle()
+                                    } label: {
+                                        Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .frame(width: 24, height: 24)
+                                            .background(Color.black.opacity(0.7))
+                                            .clipShape(Circle())
+                                    }
+                                    
+                                    Button {
+                                        // Fullscreen action - will be implemented
+                                    } label: {
+                                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .frame(width: 24, height: 24)
+                                            .background(Color.black.opacity(0.7))
+                                            .clipShape(Circle())
+                                    }
+                                    
+                                    Button {
+                                        onTap()
+                                    } label: {
+                                        Image(systemName: "ellipsis")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .frame(width: 24, height: 24)
+                                            .background(Color.black.opacity(0.7))
+                                            .clipShape(Circle())
+                                    }
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            // Bottom info
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(slot.displayStreamer)
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                    Text("\(slot.displayViewerCount) viewers")
+                                        .font(.caption2)
+                                        .foregroundColor(.white.opacity(0.8))
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(
+                                LinearGradient(
+                                    colors: [.clear, .black.opacity(0.7)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                        }
+                        .padding(8)
+                        .transition(.opacity)
+                    }
+                }
+            } else {
+                // Empty slot
+                Button(action: onTap) {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .overlay(
+                            VStack(spacing: 8) {
+                                Image(systemName: "plus.circle")
+                                    .font(.title2)
+                                    .foregroundColor(.white.opacity(0.6))
+                                Text("Add Stream")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                        )
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(slot.isActive ? Color.cyan : Color.clear, lineWidth: 2)
+        )
+        .onAppear {
+            // Auto-hide overlay after 3 seconds
+            if slot.hasStream {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showOverlay = false
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct LayoutButton: View {
+    let layout: MultiStreamTabView.LayoutType
+    let current: MultiStreamTabView.LayoutType
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: iconName)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(layout == current ? .cyan : .white.opacity(0.6))
+                .frame(width: 32, height: 32)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(layout == current ? .cyan.opacity(0.2) : .clear)
+                )
+        }
+    }
+    
+    private var iconName: String {
+        switch layout {
+        case .single: return "square"
+        case .grid2x2: return "rectangle.split.2x2"
+        case .grid3x3: return "rectangle.split.3x3"
+        case .pip: return "pip"
+        }
+    }
+}
+
+struct StreamPickerView: View {
+    @Binding var selectedSlot: Int
+    @Binding var streamSlots: [StreamSlot]
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var twitchService = RealTwitchAPIService.shared
+    @State private var availableStreams: [TwitchStream] = []
+    @State private var isLoading = false
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                ScrollView {
+                    if isLoading {
+                        VStack {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
+                            Text("Loading streams...")
+                                .foregroundColor(.white.opacity(0.7))
+                                .padding(.top)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding()
+                    } else {
+                        LazyVGrid(columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible())
+                        ], spacing: 12) {
+                            ForEach(availableStreams, id: \.id) { stream in
+                                Button {
+                                    if selectedSlot < streamSlots.count {
+                                        streamSlots[selectedSlot] = StreamSlot(twitchStream: stream, isActive: true)
+                                    }
+                                    dismiss()
+                                } label: {
+                                    TwitchStreamCard(stream: stream)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                        .padding()
+                    }
+                }
+            }
+            .navigationTitle("Choose Stream")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.cyan)
+                }
+            }
+            .onAppear {
+                loadStreams()
+            }
+        }
+    }
+    
+    private func loadStreams() {
+        isLoading = true
+        Task {
+            let result = await twitchService.getTopStreams(first: 40)
+            await MainActor.run {
+                availableStreams = result.streams
+                isLoading = false
+            }
+        }
+    }
+}
+
+struct StatCard: View {
+    let title: String
+    let value: String
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(value)
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.cyan)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+        )
+    }
+}
+
+struct AuthenticationSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    VStack(spacing: 16) {
+                        Image(systemName: "person.circle")
+                            .font(.system(size: 60))
+                            .foregroundColor(.purple)
+                        
+                        Text("Sign In")
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
+                        Text("Connect your streaming accounts to sync favorites and viewing history")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                    }
+                    
+                    VStack(spacing: 12) {
+                        Button("Continue with Twitch") {
+                            // TODO: Implement Twitch OAuth
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.purple)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                        
+                        Button("Continue with Google") {
+                            // TODO: Implement Google OAuth
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                        
+                        Button("Continue with Apple") {
+                            // TODO: Implement Apple Sign In
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.white)
+                        .foregroundColor(.black)
+                        .cornerRadius(12)
+                    }
+                    
+                    Spacer()
+                }
+                .padding()
+            }
+            .navigationTitle("Authentication")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.cyan)
+                }
+            }
+        }
+    }
+}
+
+struct SettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                List {
+                    Section("Playback") {
+                        SettingsRow(title: "Auto-play streams", value: "On")
+                        SettingsRow(title: "Default quality", value: "Auto")
+                        SettingsRow(title: "Chat enabled", value: "On")
+                    }
+                    
+                    Section("Notifications") {
+                        SettingsRow(title: "Stream notifications", value: "On")
+                        SettingsRow(title: "Favorite streamers", value: "On")
+                    }
+                    
+                    Section("About") {
+                        SettingsRow(title: "Version", value: "1.0.0")
+                        SettingsRow(title: "Terms of Service", value: "")
+                        SettingsRow(title: "Privacy Policy", value: "")
+                    }
+                }
+                .background(Color.clear)
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.cyan)
+                }
+            }
+        }
+    }
+}
+
+struct SettingsRow: View {
+    let title: String
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Text(title)
+                .foregroundColor(.white)
+            Spacer()
+            Text(value)
+                .foregroundColor(.white.opacity(0.6))
+        }
+        .listRowBackground(Color.clear)
     }
 }
 

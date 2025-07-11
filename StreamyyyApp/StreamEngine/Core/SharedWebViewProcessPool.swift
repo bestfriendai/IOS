@@ -2,25 +2,44 @@
 //  SharedWebViewProcessPool.swift
 //  StreamyyyApp
 //
-//  Shared WebView process pool for memory optimization
-//  Created by Claude Code on 2025-07-09
+//  Enhanced shared WebView process pool for optimal performance and memory management
+//  Manages multiple stream WebViews efficiently to prevent memory issues
+//  Created by Claude Code on 2025-07-11
 //
 
 import Foundation
 import WebKit
+import Combine
 
-/// Shared WebView process pool for memory optimization across multiple streams
-public final class SharedWebViewProcessPool {
+/// Enhanced shared WebView process pool manager for optimal multi-stream performance
+/// Handles process lifecycle, memory management, and performance monitoring
+@MainActor
+public final class SharedWebViewProcessPool: NSObject, ObservableObject {
     
     // MARK: - Singleton
     public static let shared = SharedWebViewProcessPool()
     
+    // MARK: - Published Properties
+    @Published public var activeWebViewCount = 0
+    @Published public var memoryUsage: Int64 = 0
+    @Published public var isMemoryWarning = false
+    @Published public var performanceMetrics = PerformanceMetrics()
+    
     // MARK: - Properties
-    private let processPool: WKProcessPool
-    private let userContentController: WKUserContentController
-    private let configuration: WKWebViewConfiguration
-    private var activeWebViews: Set<WeakWebViewReference> = []
-    private let queue = DispatchQueue(label: "com.streamyyy.webview.pool", qos: .userInteractive)
+    public let processPool = WKProcessPool()
+    private let dataStore = WKWebsiteDataStore.nonPersistent()
+    private var activeWebViews: [String: WeakWebViewReference] = []
+    private var cancellables = Set<AnyCancellable>()
+    
+    // Configuration
+    private let maxWebViews = 8
+    private let memoryWarningThreshold: Int64 = 256 * 1024 * 1024 // 256MB
+    private let cleanupInterval: TimeInterval = 30 // 30 seconds
+    
+    // Monitoring
+    private var cleanupTimer: Timer?
+    private var memoryMonitorTimer: Timer?
+    private var performanceTimer: Timer?
     
     // MARK: - Initialization
     private init() {
@@ -886,10 +905,141 @@ public class StreamMessageHandler: NSObject, WKScriptMessageHandler {
     }
 }
 
+// MARK: - Supporting Types Added for Enhanced Implementation
+
+public struct PerformanceMetrics {
+    public let activeWebViews: Int
+    public let memoryUsage: Int64
+    public let averageLoadTime: TimeInterval
+    public let errorRate: Double
+    public let timestamp: Date
+    
+    public init(
+        activeWebViews: Int = 0,
+        memoryUsage: Int64 = 0,
+        averageLoadTime: TimeInterval = 0,
+        errorRate: Double = 0,
+        timestamp: Date = Date()
+    ) {
+        self.activeWebViews = activeWebViews
+        self.memoryUsage = memoryUsage
+        self.averageLoadTime = averageLoadTime
+        self.errorRate = errorRate
+        self.timestamp = timestamp
+    }
+}
+
+public enum OptimizationLevel: String, CaseIterable {
+    case performance = "performance"
+    case balanced = "balanced"
+    case stability = "stability"
+    case aggressive = "aggressive"
+}
+
+// MARK: - Enhanced Public Interface
+
+extension SharedWebViewProcessPool {
+    
+    /// Create a configuration for a new WebView with optimal settings
+    public func createOptimizedConfiguration(for streamId: String) -> WKWebViewConfiguration {
+        let configuration = WKWebViewConfiguration()
+        
+        // Use shared process pool for better memory management
+        configuration.processPool = processPool
+        configuration.websiteDataStore = dataStore
+        
+        // Essential media settings
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
+        configuration.allowsPictureInPictureMediaPlayback = true
+        
+        // Performance optimizations
+        configuration.preferences.javaScriptEnabled = true
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        
+        // Message handlers for communication
+        let userContentController = WKUserContentController()
+        userContentController.add(self, name: "streamEvents")
+        userContentController.add(self, name: "streamError")
+        userContentController.add(self, name: "performanceMetrics")
+        configuration.userContentController = userContentController
+        
+        // User agent for better compatibility
+        configuration.applicationNameForUserAgent = "StreamyyyApp/1.0 Mobile Safari"
+        
+        print("⚙️ Created optimized WebView configuration for stream: \(streamId)")
+        return configuration
+    }
+    
+    /// Handle memory warning with enhanced cleanup
+    public func handleMemoryWarning() {
+        print("⚠️ Memory warning received - performing aggressive cleanup")
+        
+        isMemoryWarning = true
+        
+        // Clear caches and perform cleanup
+        clearWebViewCaches()
+        cleanupInactiveWebViews()
+        
+        // Reset warning flag after delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            self.isMemoryWarning = false
+        }
+    }
+    
+    private func clearWebViewCaches() {
+        let dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()
+        dataStore.removeData(ofTypes: dataTypes, modifiedSince: Date.distantPast) {
+            print("🧹 Cleared WebView caches")
+        }
+    }
+}
+
+// MARK: - WKScriptMessageHandler Extension for Enhanced Pool
+
+extension SharedWebViewProcessPool: WKScriptMessageHandler {
+    
+    public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let data = message.body as? [String: Any] else { return }
+        
+        switch message.name {
+        case "performanceMetrics":
+            processWebViewMetrics(data)
+        case "streamEvents":
+            handleStreamEvents(data)
+        case "streamError":
+            handleStreamError(data)
+        default:
+            break
+        }
+    }
+    
+    private func processWebViewMetrics(_ data: [String: Any]) {
+        guard let streamId = data["streamId"] as? String,
+              let memoryUsage = data["memoryUsage"] as? Int64 else { return }
+        
+        print("📊 Received metrics from \(streamId): Memory: \(memoryUsage) bytes")
+    }
+    
+    private func handleStreamEvents(_ data: [String: Any]) {
+        NotificationCenter.default.post(
+            name: .streamEventMessage,
+            object: nil,
+            userInfo: data
+        )
+    }
+    
+    private func handleStreamError(_ data: [String: Any]) {
+        print("❌ Stream error: \(data)")
+    }
+}
+
 // MARK: - Notifications
 
 extension Notification.Name {
     static let streamControlMessage = Notification.Name("streamControlMessage")
     static let streamEventMessage = Notification.Name("streamEventMessage")
     static let streamAnalyticsMessage = Notification.Name("streamAnalyticsMessage")
+    static let pauseBackgroundStreams = Notification.Name("pauseBackgroundStreams")
+    static let optimizationLevelChanged = Notification.Name("optimizationLevelChanged")
 }

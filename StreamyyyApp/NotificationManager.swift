@@ -2,7 +2,8 @@
 //  NotificationManager.swift
 //  StreamyyyApp
 //
-//  Handles push notifications and local notifications
+//  Legacy notification manager - use NotificationService for new features
+//  This file is maintained for backward compatibility
 //
 
 import Foundation
@@ -10,7 +11,8 @@ import UserNotifications
 import UIKit
 import Combine
 
-// MARK: - Notification Manager
+// MARK: - Legacy Notification Manager
+@available(*, deprecated, message: "Use NotificationService instead")
 class NotificationManager: NSObject, ObservableObject {
     static let shared = NotificationManager()
     
