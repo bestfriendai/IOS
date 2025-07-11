@@ -35,9 +35,22 @@ public struct TwitchEmbedWebView: UIViewRepresentable {
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
         
+        // Multi-stream configuration - enable simultaneous playback
+        configuration.suppressesIncrementalRendering = false
+        configuration.allowsAirPlayForMediaPlayback = false
+        configuration.allowsPictureInPictureMediaPlayback = false
+        
+        // Use separate process pool for each stream
+        configuration.processPool = WKProcessPool()
+        
         // Enable JavaScript (iOS compatible way)
         configuration.preferences.javaScriptEnabled = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        
+        // Enable modern web features for better compatibility
+        if #available(iOS 14.0, *) {
+            configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        }
         
         let userContentController = WKUserContentController()
         userContentController.add(context.coordinator, name: "twitchPlayerEvents")
@@ -102,6 +115,20 @@ public struct TwitchEmbedWebView: UIViewRepresentable {
                     height: 100%;
                     border: 0;
                 }
+                /* Loading indicator */
+                .loading-indicator {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    color: white;
+                    font-size: 14px;
+                    z-index: 10;
+                    display: block;
+                }
+                .loading-indicator.hidden {
+                    display: none;
+                }
                 /* Hide Twitch UI elements that don't work well in mobile */
                 .player-controls {
                     display: none !important;
@@ -109,6 +136,7 @@ public struct TwitchEmbedWebView: UIViewRepresentable {
             </style>
         </head>
         <body>
+            <div id="loading-indicator" class="loading-indicator">Loading stream...</div>
             <div id="twitch-embed"></div>
             <script src="https://embed.twitch.tv/embed/v1.js"></script>
             <script type="text/javascript">
@@ -116,6 +144,13 @@ public struct TwitchEmbedWebView: UIViewRepresentable {
                 
                 var player;
                 var isPlayerReady = false;
+                var loadingIndicator = document.getElementById('loading-indicator');
+                
+                function hideLoadingIndicator() {
+                    if (loadingIndicator) {
+                        loadingIndicator.classList.add('hidden');
+                    }
+                }
                 
                 function initializeTwitchPlayer() {
                     try {
@@ -141,6 +176,7 @@ public struct TwitchEmbedWebView: UIViewRepresentable {
                         player.addEventListener(Twitch.Embed.VIDEO_READY, function() {
                             console.log("Twitch player is ready!");
                             isPlayerReady = true;
+                            hideLoadingIndicator(); // Hide loading when ready
                             
                             // Get the video player instance
                             var videoPlayer = player.getPlayer();
@@ -149,6 +185,10 @@ public struct TwitchEmbedWebView: UIViewRepresentable {
                             // Set initial mute state
                             if (videoPlayer && videoPlayer.setMuted) {
                                 videoPlayer.setMuted(\(muted));
+                                // For multi-stream, allow independent volume control
+                                if (!(\(muted)) && videoPlayer.setVolume) {
+                                    videoPlayer.setVolume(0.3); // Moderate volume for multi-stream
+                                }
                             }
                             
                             // Notify iOS
@@ -205,6 +245,14 @@ public struct TwitchEmbedWebView: UIViewRepresentable {
                 } else {
                     document.addEventListener('DOMContentLoaded', initializeTwitchPlayer);
                 }
+                
+                // Fallback timeout to hide loading indicator if nothing works
+                setTimeout(function() {
+                    if (loadingIndicator && !loadingIndicator.classList.contains('hidden')) {
+                        console.log("Fallback: hiding loading indicator after timeout");
+                        hideLoadingIndicator();
+                    }
+                }, 8000); // 8 second fallback
                 
                 // Expose functions for iOS control
                 window.setMuted = function(muted) {

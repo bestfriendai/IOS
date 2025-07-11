@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 // MARK: - Main Content View
 struct ContentView: View {
@@ -511,6 +512,7 @@ struct MultiStreamTabView: View {
     @State private var selectedSlotIndex = 0
     @State private var showingFullscreen = false
     @State private var fullscreenSlot: StreamSlot?
+    @State private var activeAudioSlotIndex: Int? = nil // Track which slot has audio enabled
     
     enum LayoutType {
         case single, grid2x2, grid3x3, pip
@@ -605,9 +607,14 @@ struct MultiStreamTabView: View {
                             ForEach(0..<currentLayout.slotCount, id: \.self) { index in
                                 StreamSlotView(
                                     slot: index < streamSlots.count ? streamSlots[index] : StreamSlot(),
+                                    slotIndex: index,
+                                    isMuted: isSlotMuted(index),
                                     onTap: {
                                         selectedSlotIndex = index
                                         showingStreamPicker = true
+                                    },
+                                    onToggleMute: {
+                                        toggleExclusiveAudio(for: index)
                                     }
                                 )
                                 .frame(height: slotHeight)
@@ -620,8 +627,8 @@ struct MultiStreamTabView: View {
                                         Button("Remove Stream") {
                                             streamSlots[index] = StreamSlot()
                                         }
-                                        Button("Toggle Mute") {
-                                            // This would toggle the mute state
+                                        Button(isSlotMuted(index) ? "Unmute" : "Mute") {
+                                            toggleExclusiveAudio(for: index)
                                         }
                                     } else {
                                         Button("Add Stream") {
@@ -649,6 +656,20 @@ struct MultiStreamTabView: View {
         if streamSlots.count < neededSlots {
             streamSlots.append(contentsOf: Array(repeating: StreamSlot(), count: neededSlots - streamSlots.count))
         }
+    }
+    
+    private func toggleExclusiveAudio(for slotIndex: Int) {
+        // If this slot is already the active audio slot, mute it
+        if activeAudioSlotIndex == slotIndex {
+            activeAudioSlotIndex = nil
+        } else {
+            // Otherwise, make this slot the only unmuted one
+            activeAudioSlotIndex = slotIndex
+        }
+    }
+    
+    private func isSlotMuted(_ slotIndex: Int) -> Bool {
+        return activeAudioSlotIndex != slotIndex
     }
 }
 
@@ -901,6 +922,10 @@ struct TwitchStreamPlayer: UIViewRepresentable {
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.allowsPictureInPictureMediaPlayback = false
         
+        // Multi-stream configuration - allow simultaneous audio
+        configuration.suppressesIncrementalRendering = false
+        configuration.allowsAirPlayForMediaPlayback = false
+        
         // Enhanced configuration based on working multi-stream-viewer approach (iOS compatible)
         configuration.preferences.javaScriptEnabled = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
@@ -910,6 +935,9 @@ struct TwitchStreamPlayer: UIViewRepresentable {
             configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         }
         
+        // Use separate process pool for each stream to enable simultaneous playback
+        configuration.processPool = WKProcessPool()
+        
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.isOpaque = false
@@ -917,6 +945,9 @@ struct TwitchStreamPlayer: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.bounces = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
+        
+        // Configure audio session for playback
+        setupAudioSession()
         
         // Use the proven approach from working multi-stream-viewer
         let playerHTML = createWorkingPlayerHTML()
@@ -926,31 +957,62 @@ struct TwitchStreamPlayer: UIViewRepresentable {
         return webView
     }
     
+    private func setupAudioSession() {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try audioSession.setActive(true)
+            print("🔊 Audio session configured for playback with mixing")
+        } catch {
+            print("❌ Failed to configure audio session: \(error)")
+        }
+    }
+    
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // Use the working mute control approach from multi-stream-viewer
+        // Only update mute state without reloading - avoid full player reconstruction
         let muteJS = """
         try {
+            console.log('🔊 SwiftUI requesting mute state change to:', \(isMuted));
+            
+            // IMPORTANT: Only update mute state, never reload the player
             if (window.updateMute && typeof window.updateMute === 'function') {
+                console.log('🔊 Using window.updateMute function');
                 window.updateMute(\(isMuted));
-            } else if (window.twitchPlayer && window.twitchPlayer.setMuted) {
+            } else if (window.twitchPlayer && typeof window.twitchPlayer.setMuted === 'function') {
+                console.log('🔊 Using direct twitchPlayer.setMuted');
                 window.twitchPlayer.setMuted(\(isMuted));
-            } else {
-                // Fallback to iframe src update
-                var iframe = document.querySelector('iframe');
-                if (iframe && iframe.src) {
-                    var currentSrc = iframe.src;
-                    var newSrc = currentSrc.replace(/muted=(true|false)/, 'muted=\(isMuted)');
-                    if (newSrc !== currentSrc) {
-                        iframe.src = newSrc;
-                    }
+                if (!\(isMuted) && typeof window.twitchPlayer.setVolume === 'function') {
+                    window.twitchPlayer.setVolume(0.7);
+                    console.log('🔊 Set volume to 0.7');
                 }
+            } else if (window.twitchEmbedPlayer && typeof window.twitchEmbedPlayer.getPlayer === 'function') {
+                console.log('🔊 Using embed player');
+                var videoPlayer = window.twitchEmbedPlayer.getPlayer();
+                if (videoPlayer && typeof videoPlayer.setMuted === 'function') {
+                    videoPlayer.setMuted(\(isMuted));
+                    if (!\(isMuted) && typeof videoPlayer.setVolume === 'function') {
+                        videoPlayer.setVolume(0.7);
+                        console.log('🔊 Set embed volume to 0.7');
+                    }
+                    }
+            } else {
+                console.log('🔊 No player instances available for mute control');
+                // DO NOT reload iframe - just log that mute control is not available
+                // Reloading iframe causes the entire stream to restart
             }
-            console.log('Mute state updated to: \(isMuted)');
+            console.log('🔊 Mute update completed without reloading');
         } catch(e) {
-            console.log('Mute update error:', e);
+            console.error('🔊 Mute update error:', e);
         }
         """
-        webView.evaluateJavaScript(muteJS, completionHandler: nil)
+        
+        webView.evaluateJavaScript(muteJS) { result, error in
+            if let error = error {
+                print("❌ JavaScript error: \(error)")
+            } else {
+                print("🔊 Mute update sent for \(channelName): \(isMuted)")
+            }
+        }
     }
     
     func makeCoordinator() -> Coordinator {
@@ -1012,9 +1074,30 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                                 });
                                 
                                 player.addEventListener(Twitch.Embed.VIDEO_READY, function() {
-                                    console.log('✅ Embed API working');
+                                    console.log('✅ Embed API working - video ready');
                                     hideStatus();
+                                    
+                                    // Store both embed and video player instances
+                                    window.twitchEmbedPlayer = player;
                                     window.twitchPlayer = player.getPlayer();
+                                    
+                                    // Enable audio for multi-stream
+                                    var videoPlayer = player.getPlayer();
+                                    if (videoPlayer && videoPlayer.setMuted) {
+                                        videoPlayer.setMuted(\(muteParam));
+                                        console.log('🔊 Initial mute state set to:', \(muteParam));
+                                        // Allow volume for multi-stream (each stream can have independent audio)
+                                        if (!(\(muteParam)) && videoPlayer.setVolume) {
+                                            videoPlayer.setVolume(0.7); // Set reasonable volume for multi-stream
+                                            console.log('🔊 Initial volume set to 0.7');
+                                        }
+                                    }
+                                });
+                                
+                                // Also listen for when video actually starts playing
+                                player.addEventListener(Twitch.Embed.VIDEO_PLAY, function() {
+                                    console.log('✅ Video started playing - hiding status');
+                                    hideStatus();
                                 });
                                 
                                 player.addEventListener(Twitch.Embed.VIDEO_ERROR, function() {
@@ -1031,10 +1114,53 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                         name: 'Direct iframe with localhost',
                         execute: function() {
                             embedContainer.innerHTML = '<iframe src="https://player.twitch.tv/?channel=\(channelName.lowercased())&parent=localhost&muted=\(muteParam)&autoplay=true&controls=false" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>';
-                            setTimeout(function() {
-                                console.log('✅ Direct iframe method loaded');
-                                hideStatus();
-                            }, 2000);
+                            
+                            // Better iframe load detection with multiple methods
+                            var iframe = embedContainer.querySelector('iframe');
+                            if (iframe) {
+                                // Method 1: onload event
+                                iframe.onload = function() {
+                                    console.log('✅ Direct iframe method loaded via onload');
+                                    hideStatus();
+                                };
+                                
+                                // Method 2: Check if iframe content is accessible (cross-origin safe)
+                                var checkLoaded = function() {
+                                    try {
+                                        if (iframe.contentWindow) {
+                                            console.log('✅ Direct iframe content window available');
+                                            hideStatus();
+                                            return true;
+                                        }
+                                    } catch(e) {
+                                        // Cross-origin, but that's expected and means it loaded
+                                        console.log('✅ Direct iframe loaded (cross-origin expected)');
+                                        hideStatus();
+                                        return true;
+                                    }
+                                    return false;
+                                };
+                                
+                                // Check immediately and then periodically
+                                if (!checkLoaded()) {
+                                    var checkInterval = setInterval(function() {
+                                        if (checkLoaded()) {
+                                            clearInterval(checkInterval);
+                                        }
+                                    }, 500);
+                                    
+                                    // Clear interval after timeout
+                                    setTimeout(function() {
+                                        clearInterval(checkInterval);
+                                    }, 5000);
+                                }
+                                
+                                // Fallback timeout - always hide after reasonable time
+                                setTimeout(function() {
+                                    console.log('✅ Direct iframe timeout - hiding status');
+                                    hideStatus();
+                                }, 2000); // Reduced to 2 seconds for better UX
+                            }
                             return true;
                         }
                     },
@@ -1042,10 +1168,49 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                         name: 'Fallback iframe with twitch.tv',
                         execute: function() {
                             embedContainer.innerHTML = '<iframe src="https://player.twitch.tv/?channel=\(channelName.lowercased())&parent=twitch.tv&muted=\(muteParam)&autoplay=true&controls=false" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>';
-                            setTimeout(function() {
-                                console.log('✅ Fallback iframe method loaded');
-                                hideStatus();
-                            }, 2000);
+                            
+                            // Better iframe load detection with multiple methods
+                            var iframe = embedContainer.querySelector('iframe');
+                            if (iframe) {
+                                iframe.onload = function() {
+                                    console.log('✅ Fallback iframe method loaded via onload');
+                                    hideStatus();
+                                };
+                                
+                                // Check for content window availability
+                                var checkLoaded = function() {
+                                    try {
+                                        if (iframe.contentWindow) {
+                                            console.log('✅ Fallback iframe content available');
+                                            hideStatus();
+                                            return true;
+                                        }
+                                    } catch(e) {
+                                        console.log('✅ Fallback iframe loaded (cross-origin expected)');
+                                        hideStatus();
+                                        return true;
+                                    }
+                                    return false;
+                                };
+                                
+                                if (!checkLoaded()) {
+                                    var checkInterval = setInterval(function() {
+                                        if (checkLoaded()) {
+                                            clearInterval(checkInterval);
+                                        }
+                                    }, 500);
+                                    
+                                    setTimeout(function() {
+                                        clearInterval(checkInterval);
+                                    }, 5000);
+                                }
+                                
+                                // Always hide loading after reasonable time
+                                setTimeout(function() {
+                                    console.log('✅ Fallback iframe timeout - hiding status');
+                                    hideStatus();
+                                }, 2000);
+                            }
                             return true;
                         }
                     },
@@ -1080,12 +1245,13 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                         if (method.execute()) {
                             currentMethod++;
                             
-                            // Set timeout to try next method if this one doesn't work
+                            // Shorter timeout for faster fallback, but with better detection
                             setTimeout(function() {
                                 if (status.style.display !== 'none') {
+                                    console.log('⏰ Method timeout, trying next...');
                                     tryNextMethod();
                                 }
-                            }, 4000);
+                            }, 3000); // Reduced from 4000ms
                         } else {
                             currentMethod++;
                             tryNextMethod();
@@ -1096,12 +1262,37 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                     }
                 }
                 
-                // Mute control functions
+                // Enhanced mute control functions - NO RELOADING
                 window.updateMute = function(muted) {
-                    console.log('Setting mute to:', muted);
-                    if (window.twitchPlayer && window.twitchPlayer.setMuted) {
+                    console.log('🔊 Setting mute to:', muted);
+                    
+                    // Try Twitch Embed API video player first
+                    if (window.twitchPlayer && typeof window.twitchPlayer.setMuted === 'function') {
+                        console.log('🔊 Using Twitch video player setMuted');
                         window.twitchPlayer.setMuted(muted);
+                        if (!muted && typeof window.twitchPlayer.setVolume === 'function') {
+                            window.twitchPlayer.setVolume(0.7); // Set reasonable volume when unmuting
+                        }
+                        return;
                     }
+                    
+                    // Try Twitch Embed instance
+                    if (window.twitchEmbedPlayer && typeof window.twitchEmbedPlayer.getPlayer === 'function') {
+                        console.log('🔊 Using Twitch embed player setMuted');
+                        var videoPlayer = window.twitchEmbedPlayer.getPlayer();
+                        if (videoPlayer && typeof videoPlayer.setMuted === 'function') {
+                            videoPlayer.setMuted(muted);
+                            if (!muted && typeof videoPlayer.setVolume === 'function') {
+                                videoPlayer.setVolume(0.7);
+                            }
+                            return;
+                        }
+                    }
+                    
+                    // IMPORTANT: DO NOT reload iframe for mute changes
+                    // For iframe players, we can't control mute without reloading,
+                    // so we'll accept that limitation to avoid stream interruption
+                    console.log('🔊 Iframe player detected - mute control limited to avoid reload');
                 };
                 
                 // Start trying methods
@@ -1312,14 +1503,18 @@ struct ContentStreamCard: View {
 
 struct StreamSlotView: View {
     let slot: StreamSlot
+    let slotIndex: Int
+    let isMuted: Bool
     let onTap: () -> Void
-    @State private var isMuted: Bool
+    let onToggleMute: () -> Void
     @State private var showOverlay = true
     
-    init(slot: StreamSlot, onTap: @escaping () -> Void) {
+    init(slot: StreamSlot, slotIndex: Int, isMuted: Bool, onTap: @escaping () -> Void, onToggleMute: @escaping () -> Void) {
         self.slot = slot
+        self.slotIndex = slotIndex
+        self.isMuted = isMuted
         self.onTap = onTap
-        self._isMuted = State(initialValue: slot.volume == 0)
+        self.onToggleMute = onToggleMute
     }
     
     var body: some View {
@@ -1331,7 +1526,10 @@ struct StreamSlotView: View {
                     if let twitchStream = slot.twitchStream {
                         TwitchStreamPlayer(
                             channelName: twitchStream.userLogin,
-                            isMuted: $isMuted
+                            isMuted: Binding(
+                                get: { isMuted },
+                                set: { _ in onToggleMute() }
+                            )
                         )
                         .clipped()
                     } else if let stream = slot.stream {
@@ -1366,6 +1564,7 @@ struct StreamSlotView: View {
                         VStack {
                             // Live indicator
                             HStack {
+                                // Live indicator
                                 HStack(spacing: 4) {
                                     Circle()
                                         .fill(.red)
@@ -1380,18 +1579,35 @@ struct StreamSlotView: View {
                                 .background(Color.black.opacity(0.7))
                                 .cornerRadius(4)
                                 
+                                // Audio indicator (only show when this stream has audio)
+                                if !isMuted {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "speaker.wave.2.fill")
+                                            .font(.caption2)
+                                            .foregroundColor(.green)
+                                        Text("AUDIO")
+                                            .font(.caption2)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.white)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.green.opacity(0.8))
+                                    .cornerRadius(4)
+                                }
+                                
                                 Spacer()
                                 
                                 // Controls
                                 HStack(spacing: 8) {
                                     Button {
-                                        isMuted.toggle()
+                                        onToggleMute()
                                     } label: {
                                         Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                                             .font(.caption)
-                                            .foregroundColor(.white)
+                                            .foregroundColor(isMuted ? .red : .green)
                                             .frame(width: 24, height: 24)
-                                            .background(Color.black.opacity(0.7))
+                                            .background(isMuted ? Color.red.opacity(0.2) : Color.green.opacity(0.2))
                                             .clipShape(Circle())
                                     }
                                     

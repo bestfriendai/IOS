@@ -8,6 +8,7 @@
 import SwiftUI
 import WebKit
 import AVKit
+import AVFoundation
 import Network
 import Combine
 import CoreHaptics
@@ -73,6 +74,11 @@ struct StreamWebView: UIViewRepresentable {
             gestureController.setupGestures(for: webView, coordinator: context.coordinator)
         }
         
+        // Force loading to false after creating webview for multi-stream
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.isLoading = false
+        }
+        
         return webView
     }
     
@@ -82,6 +88,11 @@ struct StreamWebView: UIViewRepresentable {
         if let currentURL = webView.url?.absoluteString,
            currentURL != embedURL {
             loadStream(in: webView, url: embedURL)
+        } else {
+            // If URL hasn't changed, make sure loading is false
+            DispatchQueue.main.async {
+                self.isLoading = false
+            }
         }
         
         // Handle mute state
@@ -369,6 +380,11 @@ struct StreamWebView: UIViewRepresentable {
         
         let request = URLRequest(url: streamURL)
         webView.load(request)
+        
+        // FORCE loading to false after 1 second for multi-stream
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            self.isLoading = false
+        }
     }
     
     private func getEmbedURL(from originalURL: String) -> String {
@@ -389,7 +405,9 @@ struct StreamWebView: UIViewRepresentable {
         let components = url.components(separatedBy: "/")
         guard let channelName = components.last else { return url }
         
-        return "https://player.twitch.tv/?channel=\(channelName)&parent=localhost&autoplay=true&muted=false"
+        // Use the muted parameter properly and add controls=false
+        let mutedParam = isMuted ? "true" : "false"
+        return "https://player.twitch.tv/?channel=\(channelName)&parent=localhost&autoplay=true&muted=\(mutedParam)&controls=false"
     }
     
     private func getYouTubeEmbedURL(from url: String) -> String {
@@ -426,15 +444,36 @@ struct StreamWebView: UIViewRepresentable {
     }
     
     private func muteWebView(_ webView: WKWebView) {
-        // Mute Twitch
+        // Enhanced mute with multiple methods
         webView.evaluateJavaScript("""
-            if (window.location.hostname.includes('twitch.tv')) {
-                const video = document.querySelector('video');
-                if (video) {
-                    video.muted = true;
-                    video.volume = 0;
+            console.log('🔇 Attempting to mute stream...');
+            
+            // Method 1: Try video element (works for properly loaded Twitch embeds)
+            const video = document.querySelector('video');
+            if (video) {
+                console.log('🔇 Found video element, muting directly');
+                video.muted = true;
+                video.volume = 0;
+                console.log('🔇 Video muted successfully');
+                return;
+            }
+            
+            // Method 2: Try postMessage to iframe
+            const iframe = document.querySelector('iframe');
+            if (iframe && iframe.contentWindow) {
+                console.log('🔇 Trying iframe postMessage');
+                try {
+                    iframe.contentWindow.postMessage({
+                        event: 'command',
+                        func: 'mute',
+                        args: ''
+                    }, '*');
+                } catch(e) {
+                    console.log('🔇 iframe postMessage failed:', e);
                 }
             }
+            
+            console.log('🔇 Mute methods completed');
         """)
         
         // Mute YouTube
@@ -449,15 +488,59 @@ struct StreamWebView: UIViewRepresentable {
     }
     
     private func unmuteWebView(_ webView: WKWebView) {
-        // Unmute Twitch
+        // Configure iOS audio session for playback
+        setupAudioSession()
+        
+        // Enhanced unmute with multiple methods
         webView.evaluateJavaScript("""
-            if (window.location.hostname.includes('twitch.tv')) {
-                const video = document.querySelector('video');
-                if (video) {
-                    video.muted = false;
-                    video.volume = 1;
+            console.log('🔊 Attempting to unmute stream with enhanced methods...');
+            
+            // Method 1: Try video element directly
+            const video = document.querySelector('video');
+            if (video) {
+                console.log('🔊 Found video element, unmuting');
+                video.muted = false;
+                video.volume = 0.8; // Higher volume for better audio
+                
+                // Force play if paused
+                if (video.paused) {
+                    video.play().catch(e => console.log('Play failed:', e));
+                }
+                
+                console.log('🔊 Video unmuted successfully with volume 0.8');
+                return;
+            }
+            
+            // Method 2: Try Twitch player API if available
+            if (typeof window.Twitch !== 'undefined' && window.Twitch.Player) {
+                console.log('🔊 Trying Twitch Player API');
+                try {
+                    // Look for existing player instance
+                    const players = document.querySelectorAll('[data-a-target*="player"]');
+                    if (players.length > 0) {
+                        console.log('🔊 Found Twitch player elements');
+                    }
+                } catch(e) {
+                    console.log('🔊 Twitch API method failed:', e);
                 }
             }
+            
+            // Method 3: Try postMessage to iframe
+            const iframe = document.querySelector('iframe');
+            if (iframe && iframe.contentWindow) {
+                console.log('🔊 Trying iframe postMessage');
+                try {
+                    iframe.contentWindow.postMessage({
+                        event: 'command',
+                        func: 'unMute',
+                        args: ''
+                    }, '*');
+                } catch(e) {
+                    console.log('🔊 iframe postMessage failed:', e);
+                }
+            }
+            
+            console.log('🔊 Unmute methods completed');
         """)
         
         // Unmute YouTube
@@ -469,6 +552,16 @@ struct StreamWebView: UIViewRepresentable {
                 }
             }
         """)
+    }
+    
+    private func setupAudioSession() {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers, .allowBluetooth])
+            try audioSession.setActive(true)
+        } catch {
+            print("Failed to setup audio session: \(error)")
+        }
     }
     
     class Coordinator: NSObject, WKNavigationDelegate {
@@ -484,9 +577,19 @@ struct StreamWebView: UIViewRepresentable {
         }
         
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            // Immediately hide loading for iframe-based players
             parent.isLoading = false
             
-            // Inject custom CSS for better mobile experience
+            // Force loading off immediately and keep it off
+            DispatchQueue.main.async {
+                self.parent.isLoading = false
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.parent.isLoading = false
+            }
+            
+            // Inject custom CSS and loading detection
             let css = """
                 body {
                     margin: 0;
@@ -531,6 +634,44 @@ struct StreamWebView: UIViewRepresentable {
                 // Remove scroll bars
                 document.body.style.overflow = 'hidden';
                 
+                // Enhanced loading detection
+                function detectStreamLoaded() {
+                    console.log('🔍 Checking if stream has loaded...');
+                    
+                    // Check for video element
+                    const video = document.querySelector('video');
+                    if (video) {
+                        console.log('✅ Video element found');
+                        if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+                            console.log('✅ Video has loaded data');
+                            return true;
+                        }
+                    }
+                    
+                    // Check for iframe
+                    const iframe = document.querySelector('iframe');
+                    if (iframe) {
+                        console.log('✅ Iframe found');
+                        return true; // Assume iframe loaded if present
+                    }
+                    
+                    return false;
+                }
+                
+                // Check for loaded content periodically
+                var loadCheckCount = 0;
+                var loadCheckInterval = setInterval(function() {
+                    loadCheckCount++;
+                    
+                    if (detectStreamLoaded()) {
+                        console.log('✅ Stream detected as loaded, clearing interval');
+                        clearInterval(loadCheckInterval);
+                    } else if (loadCheckCount >= 10) { // Max 5 seconds
+                        console.log('⏰ Load check timeout, assuming loaded');
+                        clearInterval(loadCheckInterval);
+                    }
+                }, 500);
+                
                 // Prevent zoom
                 document.addEventListener('gesturestart', function(e) {
                     e.preventDefault();
@@ -543,6 +684,8 @@ struct StreamWebView: UIViewRepresentable {
                 document.addEventListener('gestureend', function(e) {
                     e.preventDefault();
                 });
+                
+                console.log('📺 Stream loading detection initialized');
             """
             
             webView.evaluateJavaScript(script)
@@ -797,6 +940,7 @@ struct StreamErrorView: View {
 // MARK: - Stream Loading View
 struct StreamLoadingView: View {
     @State private var isAnimating = false
+    @State private var showLoading = true
     
     var body: some View {
         VStack(spacing: 16) {
@@ -833,8 +977,16 @@ struct StreamLoadingView: View {
                 .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
         }
+        .opacity(showLoading ? 1.0 : 0.0)
         .onAppear {
             isAnimating = true
+            
+            // Auto-hide loading after 1 second
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    showLoading = false
+                }
+            }
         }
     }
 }
