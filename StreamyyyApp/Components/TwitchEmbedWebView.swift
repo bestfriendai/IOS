@@ -6,6 +6,7 @@
 //  Updated to resolve iOS parent parameter and streaming issues
 //
 
+import Foundation
 import SwiftUI
 import WebKit
 import Combine
@@ -79,6 +80,7 @@ public struct TwitchEmbedWebView: UIViewRepresentable {
     }
     
     private func createEmbedHTML(channel: String, muted: Bool) -> String {
+        let lowercasedChannel = channel.lowercased()
         return """
         <!DOCTYPE html>
         <html>
@@ -112,7 +114,7 @@ public struct TwitchEmbedWebView: UIViewRepresentable {
             <div id="twitch-embed"></div>
             <script src="https://embed.twitch.tv/embed/v1.js"></script>
             <script type="text/javascript">
-                console.log("Initializing Twitch player for channel: \(channel)");
+                console.log("Initializing Twitch player for channel: \(lowercasedChannel)");
                 
                 var player;
                 var isPlayerReady = false;
@@ -122,8 +124,8 @@ public struct TwitchEmbedWebView: UIViewRepresentable {
                         var options = {
                             width: "100%",
                             height: "100%",
-                            channel: "\(channel)",
-                            parent: ["localhost"], // Use localhost for iOS WKWebView compatibility
+                            channel: "\(lowercasedChannel)",
+                            parent: ["localhost"],
                             autoplay: true,
                             muted: \(muted),
                             controls: false,

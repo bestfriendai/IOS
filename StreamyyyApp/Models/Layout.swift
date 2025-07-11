@@ -888,10 +888,3 @@ public enum LayoutError: Error, LocalizedError {
     }
 }
 
-// MARK: - User Extension for Layouts
-extension User {
-    public var layouts: [Layout] {
-        get { [] } // This will be populated by the relationship
-        set { }
-    }
-}

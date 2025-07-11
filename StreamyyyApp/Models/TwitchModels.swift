@@ -89,6 +89,11 @@ struct TwitchStream: Codable, Identifiable {
     var thumbnailUrlLarge: String {
         return thumbnailUrl.replacingOccurrences(of: "{width}", with: "640").replacingOccurrences(of: "{height}", with: "360")
     }
+    
+    // Get channel name for multi-stream integration
+    func getChannelName() -> String? {
+        return userLogin.isEmpty ? nil : userLogin
+    }
 }
 
 struct TwitchPagination: Codable {
@@ -144,10 +149,14 @@ struct TwitchGame: Codable, Identifiable {
         case igdbId = "igdb_id"
     }
     
+    // Get channel name for Twitch integration
+    func getChannelName() -> String? {
+        return userLogin.isEmpty ? nil : userLogin
+    }
+    
     // Formatted box art URLs for different sizes
     var boxArtUrlSmall: String {
         return boxArtUrl.replacingOccurrences(of: "{width}", with: "52").replacingOccurrences(of: "{height}", with: "72")
-    }
     
     var boxArtUrlMedium: String {
         return boxArtUrl.replacingOccurrences(of: "{width}", with: "120").replacingOccurrences(of: "{height}", with: "160")

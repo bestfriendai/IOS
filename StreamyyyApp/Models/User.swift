@@ -69,6 +69,15 @@ public class User: Identifiable, Codable, ObservableObject {
     @Relationship(deleteRule: .cascade, inverse: \UserNotification.user)
     public var notifications: [UserNotification] = []
     
+    @Relationship(deleteRule: .cascade, inverse: \Layout.owner)
+    public var layouts: [Layout] = []
+    
+    @Relationship(deleteRule: .cascade, inverse: \ViewingHistory.user)
+    public var viewingHistory: [ViewingHistory] = []
+    
+    @Relationship(deleteRule: .cascade, inverse: \StreamCollection.owner)
+    public var streamCollections: [StreamCollection] = []
+    
     // MARK: - Initialization
     public init(
         id: String = UUID().uuidString,

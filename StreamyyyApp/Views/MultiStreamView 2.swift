@@ -12,7 +12,7 @@ import Combine
 
 // MARK: - Multi Stream View
 struct MultiStreamView: View {
-    @StateObject private var streamManager = MultiStreamManager.shared
+    @StateObject private var streamManager = MultiStreamManager()
     @State private var showingStreamPicker = false
     @State private var selectedSlotIndex = 0
     @State private var showingLayoutPicker = false
@@ -44,9 +44,7 @@ struct MultiStreamView: View {
                             showingStreamPicker = true
                         }
                     )
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 8)
                 }
             }
             .navigationTitle("Multi-Stream")
@@ -117,41 +115,22 @@ struct MultiStreamGrid: View {
     let onSlotTap: (Int) -> Void
     
     private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.fixed(UIScreen.main.bounds.width / CGFloat(streamManager.currentLayout.columns) - 20), spacing: 12), count: streamManager.currentLayout.columns)
+        Array(repeating: GridItem(.flexible(), spacing: 4), count: streamManager.currentLayout.columns)
     }
     
     var body: some View {
-        GeometryReader { geometry in
-            let itemSize = calculateItemSize(geometry: geometry)
-            
-            LazyVGrid(columns: gridColumns, spacing: 12) {
-                ForEach(streamManager.activeStreams.indices, id: \.self) { index in
-                    StreamSlotView(
-                        slot: streamManager.activeStreams[index],
-                        onTap: { onSlotTap(index) },
-                        onRemove: { streamManager.removeStream(from: index) }
-                    )
-                    .frame(width: itemSize.width, height: itemSize.height)
-                    .id(streamManager.activeStreams[index].id)
-                }
+        LazyVGrid(columns: gridColumns, spacing: 4) {
+            ForEach(streamManager.activeStreams.indices, id: \.self) { index in
+                StreamSlotView(
+                    slot: streamManager.activeStreams[index],
+                    onTap: { onSlotTap(index) },
+                    onRemove: { streamManager.removeStream(from: index) }
+                )
+                .aspectRatio(16/9, contentMode: .fit)
+                .id(streamManager.activeStreams[index].id)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: streamManager.currentLayout)
         }
-    }
-    
-    private func calculateItemSize(geometry: GeometryProxy) -> CGSize {
-        let totalPadding: CGFloat = 32 // 16pt on each side
-        let spacing: CGFloat = 12
-        let columns = CGFloat(streamManager.currentLayout.columns)
-        
-        let availableWidth = geometry.size.width - totalPadding - (spacing * (columns - 1))
-        let itemWidth = availableWidth / columns
-        
-        // 16:9 aspect ratio
-        let itemHeight = itemWidth * (9.0 / 16.0)
-        
-        return CGSize(width: itemWidth, height: itemHeight)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: streamManager.currentLayout)
     }
 }
 
@@ -192,8 +171,8 @@ struct StreamSlotView: View {
             }
         }
         .background(Color.black)
-        .cornerRadius(12)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(audioManager.activeAudioStreamId == slot.stream?.id ? Color.purple : Color.clear, lineWidth: 2))
+        .cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(audioManager.activeAudioStreamId == slot.stream?.id ? Color.purple : Color.clear, lineWidth: 2))
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("AudioStreamChanged"))) { obj in
             let activeId = obj.object as? String
             self.isMuted = activeId != slot.stream?.id
@@ -203,31 +182,12 @@ struct StreamSlotView: View {
     private var emptySlotView: some View {
         Button(action: onTap) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.15))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
-                    )
-                
-                VStack(spacing: 12) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 48))
-                        .foregroundColor(.white.opacity(0.6))
-                    
-                    VStack(spacing: 4) {
-                        Text("Add Stream")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        
-                        Text("Tap to browse streams")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
-                }
+                Color.gray.opacity(0.2)
+                Image(systemName: "plus")
+                    .font(.largeTitle)
+                    .foregroundColor(.white.opacity(0.7))
             }
         }
-        .buttonStyle(PlainButtonStyle())
     }
     
     private func streamOverlay(stream: TwitchStream) -> some View {

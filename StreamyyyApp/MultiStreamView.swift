@@ -121,7 +121,7 @@ struct GridMultiStreamView: View {
     @State private var currentLayout: GridLayoutType = .quad
     @State private var streamSlots: [StreamSlot] = []
     @State private var selectedSlotIndex: Int?
-    @State private var draggedStream: Stream?
+
     @State private var fullscreenStream: Stream?
     
     // UI State
@@ -205,123 +205,64 @@ struct GridMultiStreamView: View {
     // MARK: - Normal View Layout
     private func normalView(geometry: GeometryProxy) -> some View {
         VStack(spacing: 0) {
-            topControlBar
+            headerView
             streamGridView(geometry: geometry)
-            bottomControlBar
         }
     }
     
-    // MARK: - Top Control Bar
-    private var topControlBar: some View {
-        HStack {
-            // Layout selector
-            Button(action: { showingLayoutPicker = true }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "grid")
-                        .font(.title3)
-                        .foregroundColor(.white)
+    // MARK: - Header View
+    private var headerView: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Image(systemName: "tv")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                Text("Multi-Stream Viewer")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                HStack(spacing: 12) {
+                    Button(action: { 
+                        // Mute all action
+                    }) {
+                        Image(systemName: "speaker.slash.fill")
+                            .font(.title3)
+                    }
                     
-                    Text(currentLayout.displayName)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
+                    Button(action: { 
+                        // Settings action
+                    }) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title3)
+                    }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    Capsule()
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            Capsule()
-                                .stroke(
-                                    LinearGradient(
-                                        colors: [.cyan.opacity(0.5), .purple.opacity(0.3)],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    ),
-                                    lineWidth: 1
-                                )
-                        )
-                )
+                .foregroundColor(.white)
             }
-            .buttonStyle(ScaleButtonStyle())
             
-            Spacer()
-            
-            // Active streams indicator
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(.green)
-                    .frame(width: 8, height: 8)
-                    .overlay(
-                        Circle()
-                            .fill(.green)
-                            .blur(radius: 2)
-                            .scaleEffect(1.5)
-                    )
+            HStack {
+                Text("\(activeStreamCount) of \(currentLayout.maxStreams) streams")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
                 
-                Text("\(activeStreamCount)/\(currentLayout.maxStreams)")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                if let firstStream = streamSlots.first(where: { $0.stream != nil })?.stream {
+                    Text(firstStream.streamerName ?? "")
+                        .font(.subheadline)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(8)
+                }
+                
+                Spacer()
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Capsule()
-                            .stroke(.green.opacity(0.3), lineWidth: 1)
-                    )
-            )
             
-            Spacer()
-            
-            // Save/Load menu
-            Menu {
-                Button(action: { showingSaveDialog = true }) {
-                    Label("Save Layout", systemImage: "square.and.arrow.down")
-                }
-                
-                Button(action: { showingSavedLayouts = true }) {
-                    Label("Load Layout", systemImage: "folder")
-                }
-                
-                Divider()
-                
-                Button(action: clearAllStreams) {
-                    Label("Clear All", systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title3)
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)
-                    .background(
-                        Circle()
-                            .fill(.ultraThinMaterial)
-                            .overlay(
-                                Circle()
-                                    .stroke(.white.opacity(0.2), lineWidth: 1)
-                            )
-                    )
-            }
+            layoutSelectorView
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .background(
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.clear, .black.opacity(0.1)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                )
-        )
+        .padding(.horizontal)
+        .padding(.vertical, 12)
+        .foregroundColor(.white)
     }
     
     // MARK: - Stream Grid View
@@ -330,20 +271,16 @@ struct GridMultiStreamView: View {
         
         return ScrollView {
             LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: currentLayout.gridColumns),
-                spacing: 4
+                columns: Array(repeating: GridItem(.fixed(itemSize.width), spacing: 12), count: currentLayout.gridColumns),
+                spacing: 12
             ) {
                 ForEach(streamSlots) { slot in
                     streamSlotView(slot: slot, size: itemSize)
                         .frame(width: itemSize.width, height: itemSize.height)
-                        .onDrop(of: [.text], delegate: StreamDropDelegate(
-                            slot: slot,
-                            streamSlots: $streamSlots,
-                            draggedStream: $draggedStream
-                        ))
                 }
             }
             .padding(.horizontal, 12)
+            .padding(.vertical, 16)
             .animation(.spring(response: 0.6, dampingFraction: 0.8), value: streamSlots)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -364,68 +301,36 @@ struct GridMultiStreamView: View {
     // MARK: - Active Stream Slot
     private func activeStreamSlotView(stream: Stream, slot: StreamSlot, size: CGSize) -> some View {
         ZStack {
-            // Twitch WebView embed
-            TwitchEmbedWebView(
-                url: stream.url,
-                isMuted: slot.isMuted,
-                isLoading: .constant(false),
-                hasError: .constant(false)
-            )
+            // Enhanced Multi-Stream Twitch Player
+            if let channelName = stream.getChannelName() {
+                MultiStreamTwitchPlayer(
+                    channelName: channelName,
+                    isMuted: .constant(slot.isMuted),
+                    isVisible: true,
+                    quality: .medium
+                )
+                .onMultiStreamEvents(
+                    onReady: {
+                        print("Multi-stream \(channelName) ready")
+                    },
+                    onStateChange: { state in
+                        print("Multi-stream \(channelName) state: \(state.displayName)")
+                    },
+                    onError: { error in
+                        print("Multi-stream \(channelName) error: \(error)")
+                    },
+                    onViewerUpdate: { count in
+                        print("Multi-stream \(channelName) viewers: \(count)")
+                    }
+                )
+            } else {
+                Text("Invalid Twitch URL")
+            }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(
-                        stream.isLive ?
-                        LinearGradient(colors: [.green, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing) :
-                        LinearGradient(colors: [.gray.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        lineWidth: 2
-                    )
+                    .stroke(Color.blue, lineWidth: 2)
             )
-            
-            // Stream overlay info
-            VStack {
-                // Top overlay
-                HStack {
-                    if stream.isLive {
-                        liveIndicator
-                    }
-                    
-                    Spacer()
-                    
-                    qualityIndicator
-                }
-                .padding(8)
-                
-                Spacer()
-                
-                // Bottom overlay
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Slot \(slot.position + 1)")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white)
-                        
-                        Text(stream.formattedViewerCount)
-                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                    
-                    Spacer()
-                    
-                    streamControlButtons(stream: stream, slot: slot)
-                }
-                .padding(8)
-            }
-        }
-        .onTapGesture {
-            handleStreamTap(stream: stream)
-        }
-        .onDrag {
-            draggedStream = stream
-            return NSItemProvider(object: stream.id.uuidString as NSString)
-        }
-        .contextMenu {
-            streamContextMenu(stream: stream, slot: slot)
         }
     }
     
@@ -437,215 +342,96 @@ struct GridMultiStreamView: View {
         }) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(.ultraThinMaterial)
+                    .fill(Color.black.opacity(0.2))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [.cyan.opacity(0.3), .purple.opacity(0.2)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                style: StrokeStyle(lineWidth: 2, dash: [8, 4])
-                            )
+                            .stroke(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
                     )
                 
-                VStack(spacing: 12) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundColor(.cyan.opacity(0.7))
-                    
-                    VStack(spacing: 4) {
-                        Text("Add Stream")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white.opacity(0.8))
-                        
-                        Text("Slot \(slot.position + 1)")
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundColor(.white.opacity(0.5))
-                    }
-                }
-            }
-        }
-        .buttonStyle(ScaleButtonStyle())
-    }
-    
-    // MARK: - Stream Control Components
-    private var liveIndicator: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(.red)
-                .frame(width: 6, height: 6)
-            
-            Text("LIVE")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            Capsule()
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    Capsule()
-                        .stroke(.red.opacity(0.5), lineWidth: 1)
-                )
-        )
-    }
-    
-    private var qualityIndicator: some View {
-        Text("HD")
-            .font(.system(size: 10, weight: .bold, design: .rounded))
-            .foregroundColor(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Capsule()
-                            .stroke(.cyan.opacity(0.5), lineWidth: 1)
-                    )
-            )
-    }
-    
-    private func streamControlButtons(stream: Stream, slot: StreamSlot) -> some View {
-        HStack(spacing: 8) {
-            // Mute button
-            Button(action: {
-                toggleMute(for: slot)
-            }) {
-                Image(systemName: slot.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white)
-                    .frame(width: 24, height: 24)
-                    .background(
-                        Circle()
-                            .fill(.ultraThinMaterial)
-                            .overlay(
-                                Circle()
-                                    .stroke(slot.isMuted ? .red.opacity(0.5) : .cyan.opacity(0.5), lineWidth: 1)
-                            )
-                    )
-            }
-            
-            // Fullscreen button
-            Button(action: {
-                enterFullscreen(stream: stream)
-            }) {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white)
-                    .frame(width: 24, height: 24)
-                    .background(
-                        Circle()
-                            .fill(.ultraThinMaterial)
-                            .overlay(
-                                Circle()
-                                    .stroke(.white.opacity(0.3), lineWidth: 1)
-                            )
-                    )
-            }
-        }
-    }
-    
-    // MARK: - Context Menu
-    private func streamContextMenu(stream: Stream, slot: StreamSlot) -> some View {
-        Group {
-            Button(action: {
-                enterFullscreen(stream: stream)
-            }) {
-                Label("Fullscreen", systemImage: "arrow.up.left.and.arrow.down.right")
-            }
-            
-            Button(action: {
-                toggleMute(for: slot)
-            }) {
-                Label(slot.isMuted ? "Unmute" : "Mute", systemImage: slot.isMuted ? "speaker.wave.2" : "speaker.slash")
-            }
-            
-            Divider()
-            
-            Button(action: {
-                removeStream(from: slot)
-            }) {
-                Label("Remove", systemImage: "trash")
-            }
-            .foregroundColor(.red)
-        }
-    }
-    
-    // MARK: - Bottom Control Bar
-    private var bottomControlBar: some View {
-        HStack {
-            // Add Stream button
-            Button(action: { showingStreamPicker = true }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title3)
+                VStack(spacing: 8) {
+                    Image(systemName: "plus")
+                        .font(.largeTitle)
                         .foregroundColor(.white)
                     
                     Text("Add Stream")
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.headline)
                         .foregroundColor(.white)
+                    
+                    Text("Tap to browse streams")
+                        .font(.caption)
+                        .foregroundColor(.gray)
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [.cyan, .purple],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                )
             }
-            .buttonStyle(ScaleButtonStyle())
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+
+    
+    // MARK: - Layout Selector
+    private var layoutSelectorView: some View {
+        HStack {
+            Text("Layout:")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
             
-            Spacer()
-            
-            // Layout controls
-            HStack(spacing: 16) {
+            HStack(spacing: 8) {
                 ForEach(GridLayoutType.allCases, id: \.self) { layout in
-                    Button(action: {
-                        changeLayout(to: layout)
-                    }) {
-                        Text(layout.rawValue)
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundColor(currentLayout == layout ? .black : .white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule()
-                                    .fill(currentLayout == layout ? .white : .clear)
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(.white.opacity(0.3), lineWidth: 1)
-                                    )
-                            )
+                    Button(action: { changeLayout(to: layout) }) {
+                        HStack(spacing: 6) {
+                            layoutIcon(for: layout)
+                            Text(layout.rawValue)
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(currentLayout == layout ? Color.blue : Color.white.opacity(0.1))
+                        )
+                        .foregroundColor(currentLayout == layout ? .white : .gray)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(currentLayout == layout ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
+                        )
                     }
                     .buttonStyle(ScaleButtonStyle())
                 }
             }
+            
+            Spacer()
+            
+            Button(action: clearAllStreams) {
+                Text("Clear All")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.red)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.red.opacity(0.1))
+                    )
+            }
+            .buttonStyle(ScaleButtonStyle())
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .background(
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.black.opacity(0.1), .clear],
-                                startPoint: .bottom,
-                                endPoint: .top
-                            )
-                        )
-                )
-        )
+    }
+    
+    @ViewBuilder
+    private func layoutIcon(for layout: GridLayoutType) -> some View {
+        switch layout {
+        case .single:
+            Image(systemName: "square")
+                .font(.system(size: 12, weight: .medium))
+        case .quad:
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 12, weight: .medium))
+        case .nine:
+            Image(systemName: "square.grid.3x3")
+                .font(.system(size: 12, weight: .medium))
+        case .sixteen:
+            Image(systemName: "square.grid.4x4")
+                .font(.system(size: 12, weight: .medium))
+        }
     }
     
     // MARK: - Fullscreen View
@@ -653,11 +439,22 @@ struct GridMultiStreamView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            TwitchEmbedWebView(
-                url: stream.url,
-                isMuted: false,
-                isLoading: .constant(false),
-                hasError: .constant(false)
+            MultiStreamTwitchPlayer(
+                channelName: stream.getChannelName() ?? "shroud",
+                isMuted: .constant(false),
+                isVisible: true,
+                quality: .source
+            )
+            .onMultiStreamEvents(
+                onReady: {
+                    print("Fullscreen multi-stream ready")
+                },
+                onStateChange: { state in
+                    print("Fullscreen multi-stream state: \(state.displayName)")
+                },
+                onError: { error in
+                    print("Fullscreen multi-stream error: \(error)")
+                }
             )
             .ignoresSafeArea()
             
@@ -930,16 +727,41 @@ struct GridMultiStreamView: View {
     
     private func calculateItemSize(geometry: GeometryProxy) -> CGSize {
         let padding: CGFloat = 24
-        let spacing: CGFloat = 4
+        let spacing: CGFloat = 12
         let columns = currentLayout.gridColumns
         
+        // Calculate available space
         let availableWidth = geometry.size.width - padding
-        let itemWidth = (availableWidth - CGFloat(columns - 1) * spacing) / CGFloat(columns)
+        let availableHeight = geometry.size.height - 200 // Account for header and layout selector
         
-        let availableHeight = geometry.size.height - 140 // Account for top/bottom bars
-        let itemHeight = (availableHeight - CGFloat(columns - 1) * spacing) / CGFloat(columns)
+        // Calculate maximum possible width and height
+        let maxItemWidth = (availableWidth - CGFloat(columns - 1) * spacing) / CGFloat(columns)
+        let maxItemHeight = (availableHeight - CGFloat(columns - 1) * spacing) / CGFloat(columns)
         
-        return CGSize(width: itemWidth, height: itemHeight)
+        // Use 16:9 aspect ratio for streams
+        let aspectRatio: CGFloat = 16.0 / 9.0
+        
+        // Calculate size based on width constraint
+        let widthBasedHeight = maxItemWidth / aspectRatio
+        
+        // Calculate size based on height constraint  
+        let heightBasedWidth = maxItemHeight * aspectRatio
+        
+        // Use the smaller dimension to ensure it fits
+        let finalWidth: CGFloat
+        let finalHeight: CGFloat
+        
+        if widthBasedHeight <= maxItemHeight {
+            // Width is the limiting factor
+            finalWidth = maxItemWidth
+            finalHeight = widthBasedHeight
+        } else {
+            // Height is the limiting factor
+            finalWidth = heightBasedWidth
+            finalHeight = maxItemHeight
+        }
+        
+        return CGSize(width: finalWidth, height: finalHeight)
     }
 }
 
@@ -1097,38 +919,7 @@ struct SavedLayoutRow: View {
     }
 }
 
-// MARK: - Drag & Drop Support
-struct StreamDropDelegate: DropDelegate {
-    let slot: StreamSlot
-    @Binding var streamSlots: [StreamSlot]
-    @Binding var draggedStream: Stream?
-    
-    func performDrop(info: DropInfo) -> Bool {
-        guard let draggedStream = draggedStream else { return false }
-        
-        // Find the slot index
-        guard let targetIndex = streamSlots.firstIndex(where: { $0.id == slot.id }) else { return false }
-        
-        // Find source slot and clear it
-        if let sourceIndex = streamSlots.firstIndex(where: { $0.stream?.id == draggedStream.id }) {
-            streamSlots[sourceIndex].stream = nil
-        }
-        
-        // Set stream in target slot
-        streamSlots[targetIndex].stream = draggedStream
-        
-        self.draggedStream = nil
-        return true
-    }
-    
-    func dropEntered(info: DropInfo) {
-        // Visual feedback could be added here
-    }
-    
-    func dropExited(info: DropInfo) {
-        // Reset visual feedback
-    }
-}
+
 
 // MARK: - Custom Button Style
 struct ScaleButtonStyle: ButtonStyle {

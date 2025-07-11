@@ -9,7 +9,8 @@
 import SwiftUI
 
 struct DiscoverView: View {
-    @EnvironmentObject var streamManager: StreamManager
+    @StateObject private var appState = AppStateManager.shared
+    @StateObject private var twitchAPI = TwitchAPIService.shared
     @State private var searchText = ""
     @State private var selectedCategory: StreamCategory = .all
     @State private var featuredStreams: [FeaturedStream] = []
@@ -347,7 +348,26 @@ struct DiscoverView: View {
     // MARK: - Actions
     
     private func addStream(_ url: String, title: String) {
-        streamManager.addStream(url: url)
+        // Create a TwitchStream from the URL and title
+        let stream = TwitchStream(
+            id: UUID().uuidString,
+            userId: "user_\(UUID().uuidString)",
+            userLogin: title.lowercased().replacingOccurrences(of: " ", with: ""),
+            userName: title,
+            gameId: "",
+            gameName: "Unknown",
+            type: "live",
+            title: title,
+            viewerCount: 0,
+            startedAt: ISO8601DateFormatter().string(from: Date()),
+            language: "en",
+            thumbnailUrl: "https://static-cdn.jtvnw.net/previews-ttv/live_user_\(title.lowercased())-{width}x{height}.jpg",
+            tagIds: nil,
+            tags: nil,
+            isMature: false
+        )
+        
+        appState.addStreamFromDiscover(stream)
         addedStreamTitle = title
         showingStreamAddedPopup = true
         StreamyyyDesignSystem.hapticNotification(.success)
@@ -356,9 +376,68 @@ struct DiscoverView: View {
     private func loadDiscoverContent() async {
         isLoading = true
         
-        // Simulate API calls
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        do {
+            // Load real featured streams from Twitch API
+            let featuredTwitchStreams = try await twitchAPI.getTopStreams(limit: 10)
+            
+            // Convert to FeaturedStream format
+            featuredStreams = featuredTwitchStreams.map { twitchStream in
+                FeaturedStream(
+                    id: twitchStream.id,
+                    title: twitchStream.userName,
+                    game: twitchStream.gameName ?? "Unknown",
+                    viewers: twitchStream.viewerCount,
+                    thumbnailURL: twitchStream.thumbnailUrl,
+                    platform: Platform.twitch,
+                    url: "https://twitch.tv/\(twitchStream.userLogin)"
+                )
+            }
+            
+            // Load trending streams
+            let trendingTwitchStreams = try await twitchAPI.getTopStreams(limit: 20, offset: 10)
+            
+            // Convert to TrendingStream format
+            trendingStreams = trendingTwitchStreams.map { twitchStream in
+                let category = mapGameToCategory(twitchStream.gameName ?? "Unknown")
+                return TrendingStream(
+                    id: twitchStream.id,
+                    title: twitchStream.userName,
+                    game: twitchStream.gameName ?? "Unknown",
+                    viewers: twitchStream.viewerCount,
+                    category: category,
+                    platform: Platform.twitch,
+                    url: "https://twitch.tv/\(twitchStream.userLogin)"
+                )
+            }
+            
+        } catch {
+            print("Failed to load streams: \(error)")
+            // Fall back to mock data if API fails
+            loadMockData()
+        }
         
+        isLoading = false
+    }
+    
+    private func mapGameToCategory(_ gameName: String) -> StreamCategory {
+        let lowerGame = gameName.lowercased()
+        
+        if lowerGame.contains("chatting") || lowerGame.contains("talk") {
+            return .chatting
+        } else if lowerGame.contains("music") || lowerGame.contains("sing") {
+            return .music
+        } else if lowerGame.contains("art") || lowerGame.contains("draw") || lowerGame.contains("creative") {
+            return .art
+        } else if lowerGame.contains("sport") || lowerGame.contains("football") || lowerGame.contains("basketball") {
+            return .sports
+        } else if lowerGame.contains("tech") || lowerGame.contains("programming") || lowerGame.contains("coding") {
+            return .tech
+        } else {
+            return .gaming // Default to gaming for most content
+        }
+    }
+    
+    private func loadMockData() {
         featuredStreams = [
             FeaturedStream(
                 id: "1",
@@ -377,15 +456,6 @@ struct DiscoverView: View {
                 thumbnailURL: "https://example.com/thumb2.jpg",
                 platform: Platform.twitch,
                 url: "https://twitch.tv/pokimane"
-            ),
-            FeaturedStream(
-                id: "3",
-                title: "TheGrefg",
-                game: "Fortnite",
-                viewers: 28000,
-                thumbnailURL: "https://example.com/thumb3.jpg",
-                platform: Platform.twitch,
-                url: "https://twitch.tv/thegrefg"
             )
         ]
         
@@ -401,52 +471,14 @@ struct DiscoverView: View {
             ),
             TrendingStream(
                 id: "2",
-                title: "MKBHD",
-                game: "Tech Review",
-                viewers: 15000,
-                category: .tech,
-                platform: Platform.youtube,
-                url: "https://youtube.com/@mkbhd"
-            ),
-            TrendingStream(
-                id: "3",
                 title: "Ninja",
                 game: "Fortnite",
                 viewers: 25000,
                 category: .gaming,
                 platform: Platform.twitch,
                 url: "https://twitch.tv/ninja"
-            ),
-            TrendingStream(
-                id: "4",
-                title: "Gaules",
-                game: "Counter-Strike 2",
-                viewers: 42000,
-                category: .gaming,
-                platform: Platform.twitch,
-                url: "https://twitch.tv/gaules"
-            ),
-            TrendingStream(
-                id: "5",
-                title: "HasanAbi",
-                game: "Just Chatting",
-                viewers: 31000,
-                category: .chatting,
-                platform: Platform.twitch,
-                url: "https://twitch.tv/hasanabi"
-            ),
-            TrendingStream(
-                id: "6",
-                title: "ibai",
-                game: "Music",
-                viewers: 19000,
-                category: .music,
-                platform: Platform.twitch,
-                url: "https://twitch.tv/ibai"
             )
         ]
-        
-        isLoading = false
     }
 }
 

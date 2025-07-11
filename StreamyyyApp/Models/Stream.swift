@@ -116,6 +116,15 @@ public class Stream: Identifiable, Codable, ObservableObject {
         // Generate embed URL
         self.embedURL = generateEmbedURL()
     }
+
+    // MARK: - Helpers
+    public func getChannelName() -> String? {
+        guard platform == .twitch else { return nil }
+        let components = URLComponents(string: url)
+        let path = components?.path ?? ""
+        let channel = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return channel.isEmpty ? nil : channel
+    }
     
     // MARK: - Codable
     enum CodingKeys: String, CodingKey {
