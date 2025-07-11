@@ -35,9 +35,7 @@ public struct TwitchEmbedWebView: UIViewRepresentable {
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
         
-        // Enable modern web features
-        configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-        configuration.preferences.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+        // Enable JavaScript (iOS compatible way)
         configuration.preferences.javaScriptEnabled = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         

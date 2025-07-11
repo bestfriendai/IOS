@@ -542,15 +542,34 @@ struct MultiStreamTabView: View {
                 VStack(spacing: 0) {
                     // Layout Controls
                     HStack {
-                        Text("Multi-Stream")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Multi-Stream")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                            
+                            let activeCount = streamSlots.prefix(currentLayout.slotCount).filter { $0.hasStream }.count
+                            Text("\(activeCount)/\(currentLayout.slotCount) streams active")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.6))
+                        }
                         
                         Spacer()
                         
-                        // Layout picker
+                        // Controls
                         HStack(spacing: 8) {
+                            // Quick add stream button
+                            Button {
+                                selectedSlotIndex = streamSlots.firstIndex { !$0.hasStream } ?? 0
+                                showingStreamPicker = true
+                            } label: {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.cyan)
+                            }
+                            .disabled(streamSlots.prefix(currentLayout.slotCount).allSatisfy { $0.hasStream })
+                            
+                            // Layout picker
                             LayoutButton(layout: .grid2x2, current: currentLayout) {
                                 currentLayout = .grid2x2
                                 updateStreamSlots()
@@ -566,23 +585,55 @@ struct MultiStreamTabView: View {
                     
                     // Stream Grid
                     GeometryReader { geometry in
-                        let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: currentLayout.gridColumns)
+                        let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: currentLayout.gridColumns)
+                        let availableHeight = geometry.size.height - 16 // Account for padding
+                        let availableWidth = geometry.size.width - 16
                         
-                        ScrollView {
-                            LazyVGrid(columns: columns, spacing: 4) {
-                                ForEach(0..<currentLayout.slotCount, id: \.self) { index in
-                                    StreamSlotView(
-                                        slot: index < streamSlots.count ? streamSlots[index] : StreamSlot(),
-                                        onTap: {
+                        // Calculate appropriate height for each stream slot
+                        let slotHeight: CGFloat = {
+                            switch currentLayout {
+                            case .grid2x2:
+                                return (availableHeight - 8) / 2 // 8 for spacing between rows
+                            case .grid3x3:
+                                return (availableHeight - 16) / 3 // 16 for spacing between rows
+                            default:
+                                return availableHeight
+                            }
+                        }()
+                        
+                        LazyVGrid(columns: columns, spacing: 8) {
+                            ForEach(0..<currentLayout.slotCount, id: \.self) { index in
+                                StreamSlotView(
+                                    slot: index < streamSlots.count ? streamSlots[index] : StreamSlot(),
+                                    onTap: {
+                                        selectedSlotIndex = index
+                                        showingStreamPicker = true
+                                    }
+                                )
+                                .frame(height: slotHeight)
+                                .contextMenu {
+                                    if index < streamSlots.count && streamSlots[index].hasStream {
+                                        Button("Replace Stream") {
                                             selectedSlotIndex = index
                                             showingStreamPicker = true
                                         }
-                                    )
-                                    .aspectRatio(16/9, contentMode: .fit)
+                                        Button("Remove Stream") {
+                                            streamSlots[index] = StreamSlot()
+                                        }
+                                        Button("Toggle Mute") {
+                                            // This would toggle the mute state
+                                        }
+                                    } else {
+                                        Button("Add Stream") {
+                                            selectedSlotIndex = index
+                                            showingStreamPicker = true
+                                        }
+                                    }
                                 }
                             }
-                            .padding(8)
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 8)
                     }
                 }
             }
@@ -849,54 +900,238 @@ struct TwitchStreamPlayer: UIViewRepresentable {
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.allowsPictureInPictureMediaPlayback = false
+        
+        // Enhanced configuration based on working multi-stream-viewer approach (iOS compatible)
         configuration.preferences.javaScriptEnabled = true
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        
+        // Enable modern web features for better compatibility
+        if #available(iOS 14.0, *) {
+            configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        }
         
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = context.coordinator
         webView.isOpaque = false
         webView.backgroundColor = UIColor.black
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.bounces = false
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         
-        // Create the Twitch embed HTML
-        let embedHTML = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <style>
-                body, html {
-                    margin: 0;
-                    padding: 0;
-                    width: 100%;
-                    height: 100%;
-                    background-color: #000;
-                    overflow: hidden;
-                }
-                iframe {
-                    width: 100%;
-                    height: 100%;
-                    border: none;
-                }
-            </style>
-        </head>
-        <body>
-            <iframe
-                src="https://player.twitch.tv/?channel=\\(channelName)&parent=localhost&autoplay=true&muted=\\(isMuted)"
-                allowfullscreen>
-            </iframe>
-        </body>
-        </html>
-        """
+        // Use the proven approach from working multi-stream-viewer
+        let playerHTML = createWorkingPlayerHTML()
+        webView.loadHTMLString(playerHTML, baseURL: URL(string: "https://localhost"))
         
-        webView.loadHTMLString(embedHTML, baseURL: URL(string: "https://localhost"))
+        print("🎥 Starting Twitch player for channel: \(channelName) using proven multi-stream-viewer approach")
         return webView
     }
     
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // Update mute state if needed
-        let muteJS = "document.querySelector('iframe').contentWindow.postMessage({type: 'setMuted', data: \\(isMuted)}, '*');"
+        // Use the working mute control approach from multi-stream-viewer
+        let muteJS = """
+        try {
+            if (window.updateMute && typeof window.updateMute === 'function') {
+                window.updateMute(\(isMuted));
+            } else if (window.twitchPlayer && window.twitchPlayer.setMuted) {
+                window.twitchPlayer.setMuted(\(isMuted));
+            } else {
+                // Fallback to iframe src update
+                var iframe = document.querySelector('iframe');
+                if (iframe && iframe.src) {
+                    var currentSrc = iframe.src;
+                    var newSrc = currentSrc.replace(/muted=(true|false)/, 'muted=\(isMuted)');
+                    if (newSrc !== currentSrc) {
+                        iframe.src = newSrc;
+                    }
+                }
+            }
+            console.log('Mute state updated to: \(isMuted)');
+        } catch(e) {
+            console.log('Mute update error:', e);
+        }
+        """
         webView.evaluateJavaScript(muteJS, completionHandler: nil)
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    private func createWorkingPlayerHTML() -> String {
+        let muteParam = isMuted ? "true" : "false"
+        let bundleId = Bundle.main.bundleIdentifier ?? "localhost"
+        
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, user-scalable=no">
+            <style>
+                html, body {
+                    margin: 0; padding: 0; width: 100%; height: 100%;
+                    background-color: black; overflow: hidden;
+                }
+                #twitch-embed { width: 100%; height: 100%; }
+                .status {
+                    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                    color: #fff; font-family: Arial, sans-serif; font-size: 12px;
+                    text-align: center; z-index: 100; padding: 10px;
+                }
+                .error { color: #ff4444; }
+            </style>
+        </head>
+        <body>
+            <div id="status" class="status">Loading stream...</div>
+            <div id="twitch-embed"></div>
+            <script src="https://embed.twitch.tv/embed/v1.js"></script>
+            <script>
+                console.log('🎥 Initializing Twitch player for: \(channelName.lowercased())');
+                
+                var status = document.getElementById('status');
+                var embedContainer = document.getElementById('twitch-embed');
+                var currentMethod = 0;
+                
+                // Multi-method approach based on working multi-stream-viewer
+                var streamingMethods = [
+                    {
+                        name: 'Embed API with localhost',
+                        execute: function() {
+                            if (typeof Twitch !== 'undefined' && Twitch.Embed) {
+                                var player = new Twitch.Embed('twitch-embed', {
+                                    width: '100%',
+                                    height: '100%',
+                                    channel: '\(channelName.lowercased())',
+                                    parent: ['localhost'],
+                                    autoplay: true,
+                                    muted: \(muteParam),
+                                    controls: false,
+                                    playsinline: true,
+                                    allowfullscreen: false,
+                                    layout: 'video'
+                                });
+                                
+                                player.addEventListener(Twitch.Embed.VIDEO_READY, function() {
+                                    console.log('✅ Embed API working');
+                                    hideStatus();
+                                    window.twitchPlayer = player.getPlayer();
+                                });
+                                
+                                player.addEventListener(Twitch.Embed.VIDEO_ERROR, function() {
+                                    console.log('❌ Embed API failed, trying next method');
+                                    tryNextMethod();
+                                });
+                                
+                                return true;
+                            }
+                            return false;
+                        }
+                    },
+                    {
+                        name: 'Direct iframe with localhost',
+                        execute: function() {
+                            embedContainer.innerHTML = '<iframe src="https://player.twitch.tv/?channel=\(channelName.lowercased())&parent=localhost&muted=\(muteParam)&autoplay=true&controls=false" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>';
+                            setTimeout(function() {
+                                console.log('✅ Direct iframe method loaded');
+                                hideStatus();
+                            }, 2000);
+                            return true;
+                        }
+                    },
+                    {
+                        name: 'Fallback iframe with twitch.tv',
+                        execute: function() {
+                            embedContainer.innerHTML = '<iframe src="https://player.twitch.tv/?channel=\(channelName.lowercased())&parent=twitch.tv&muted=\(muteParam)&autoplay=true&controls=false" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>';
+                            setTimeout(function() {
+                                console.log('✅ Fallback iframe method loaded');
+                                hideStatus();
+                            }, 2000);
+                            return true;
+                        }
+                    },
+                    {
+                        name: 'Bundle ID iframe',
+                        execute: function() {
+                            embedContainer.innerHTML = '<iframe src="https://player.twitch.tv/?channel=\(channelName.lowercased())&parent=\(bundleId)&muted=\(muteParam)&autoplay=true&controls=false" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>';
+                            setTimeout(function() {
+                                console.log('✅ Bundle ID iframe method loaded');
+                                hideStatus();
+                            }, 2000);
+                            return true;
+                        }
+                    }
+                ];
+                
+                function hideStatus() {
+                    status.style.display = 'none';
+                }
+                
+                function showError() {
+                    status.innerHTML = 'Stream unavailable';
+                    status.className = 'status error';
+                }
+                
+                function tryNextMethod() {
+                    if (currentMethod < streamingMethods.length) {
+                        var method = streamingMethods[currentMethod];
+                        console.log('🔄 Trying method: ' + method.name);
+                        status.innerHTML = 'Loading (' + (currentMethod + 1) + '/' + streamingMethods.length + ')...';
+                        
+                        if (method.execute()) {
+                            currentMethod++;
+                            
+                            // Set timeout to try next method if this one doesn't work
+                            setTimeout(function() {
+                                if (status.style.display !== 'none') {
+                                    tryNextMethod();
+                                }
+                            }, 4000);
+                        } else {
+                            currentMethod++;
+                            tryNextMethod();
+                        }
+                    } else {
+                        console.log('❌ All methods failed');
+                        showError();
+                    }
+                }
+                
+                // Mute control functions
+                window.updateMute = function(muted) {
+                    console.log('Setting mute to:', muted);
+                    if (window.twitchPlayer && window.twitchPlayer.setMuted) {
+                        window.twitchPlayer.setMuted(muted);
+                    }
+                };
+                
+                // Start trying methods
+                setTimeout(tryNextMethod, 100);
+                
+            </script>
+        </body>
+        </html>
+        """
+    }
+    
+    class Coordinator: NSObject, WKNavigationDelegate {
+        var parent: TwitchStreamPlayer
+        
+        init(_ parent: TwitchStreamPlayer) {
+            self.parent = parent
+            super.init()
+        }
+        
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            print("TwitchStreamPlayer finished loading")
+        }
+        
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            print("TwitchStreamPlayer navigation failed: \(error)")
+        }
+        
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            print("TwitchStreamPlayer provisional navigation failed: \(error)")
+        }
     }
 }
 
@@ -1217,15 +1452,31 @@ struct StreamSlotView: View {
                 // Empty slot
                 Button(action: onTap) {
                     Rectangle()
-                        .fill(Color.gray.opacity(0.2))
+                        .fill(Color.gray.opacity(0.15))
                         .overlay(
-                            VStack(spacing: 8) {
-                                Image(systemName: "plus.circle")
-                                    .font(.title2)
-                                    .foregroundColor(.white.opacity(0.6))
-                                Text("Add Stream")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.6))
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.white.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [8, 8]))
+                        )
+                        .overlay(
+                            VStack(spacing: 16) {
+                                Circle()
+                                    .fill(Color.purple.opacity(0.2))
+                                    .frame(width: 80, height: 80)
+                                    .overlay(
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 32, weight: .medium))
+                                            .foregroundColor(.purple)
+                                    )
+                                
+                                VStack(spacing: 4) {
+                                    Text("Add Stream")
+                                        .font(.headline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.white)
+                                    Text("Tap to browse streams")
+                                        .font(.subheadline)
+                                        .foregroundColor(.white.opacity(0.6))
+                                }
                             }
                         )
                 }

@@ -45,9 +45,7 @@ public struct MultiStreamTwitchPlayer: UIViewRepresentable {
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.allowsPictureInPictureMediaPlayback = false // Disable PiP for multi-stream
         
-        // Performance optimizations for multiple streams
-        configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-        configuration.preferences.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+        // Performance optimizations for multiple streams (iOS compatible)
         configuration.preferences.javaScriptEnabled = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false // Prevent popups
         
