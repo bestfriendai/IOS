@@ -66,6 +66,9 @@ public struct MultiStreamTwitchPlayer: UIViewRepresentable {
         webView.scrollView.showsVerticalScrollIndicator = false
         webView.scrollView.showsHorizontalScrollIndicator = false
         
+        // Store webView reference in coordinator
+        context.coordinator.webView = webView
+        
         // Load optimized embed HTML
         let embedHTML = createOptimizedEmbedHTML()
         webView.loadHTMLString(embedHTML, baseURL: URL(string: "https://localhost"))
@@ -276,6 +279,21 @@ public struct MultiStreamTwitchPlayer: UIViewRepresentable {
                     setTimeout(initializeMultiStreamPlayer, 100);
                 });
                 
+                // Also try to initialize immediately if Twitch is already loaded
+                if (typeof Twitch !== 'undefined' && Twitch.Embed) {
+                    console.log("Twitch already loaded, initializing immediately...");
+                    initializeMultiStreamPlayer();
+                } else {
+                    console.log("Waiting for Twitch embed script to load...");
+                    // Add a fallback initialization after 2 seconds
+                    setTimeout(function() {
+                        if (!isPlayerReady && typeof Twitch !== 'undefined' && Twitch.Embed) {
+                            console.log("Fallback initialization after 2 seconds...");
+                            initializeMultiStreamPlayer();
+                        }
+                    }, 2000);
+                }
+                
                 // Cleanup function for multi-stream
                 window.addEventListener('beforeunload', function() {
                     if (window.multiStreamVideoPlayer) {
@@ -291,13 +309,52 @@ public struct MultiStreamTwitchPlayer: UIViewRepresentable {
     // MARK: - Coordinator
     public class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var parent: MultiStreamTwitchPlayer
+        var webView: WKWebView?
         
         init(_ parent: MultiStreamTwitchPlayer) {
             self.parent = parent
+            super.init()
+            
+            // Listen for audio state changes
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleAudioStateChange(_:)),
+                name: NSNotification.Name("StreamAudioStateChanged"),
+                object: nil
+            )
+        }
+        
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+        
+        @objc private func handleAudioStateChange(_ notification: Notification) {
+            guard let userInfo = notification.userInfo,
+                  let streamId = userInfo["streamId"] as? String,
+                  let isMuted = userInfo["isMuted"] as? Bool,
+                  streamId == parent.channelName else { return }
+            
+            // Update mute state in the WebView
+            DispatchQueue.main.async { [weak self] in
+                self?.parent.isMuted = isMuted
+                let muteJS = "window.multiStreamPlayer && window.multiStreamPlayer.setMuted(\(isMuted));"
+                self?.webView?.evaluateJavaScript(muteJS)
+            }
         }
         
         public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             print("Multi-stream WebView loaded for channel: \(parent.channelName)")
+            
+            // Check if Twitch embed loaded after a delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                webView.evaluateJavaScript("typeof Twitch !== 'undefined' && isPlayerReady") { result, error in
+                    if let isReady = result as? Bool, !isReady {
+                        print("Warning: Twitch player not ready after 3 seconds for \(self.parent.channelName)")
+                        // Force a ready state if the page loaded but player didn't initialize
+                        self.parent.onPlaybackStateChange?(.ready)
+                    }
+                }
+            }
         }
         
         public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

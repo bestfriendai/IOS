@@ -499,6 +499,7 @@ enum MultiStreamLayout: String, CaseIterable, Identifiable {
     case twoByTwo = "2x2"
     case threeByThree = "3x3"
     case fourByFour = "4x4"
+    case stacked = "stacked"
     
     var id: String { rawValue }
     
@@ -508,6 +509,7 @@ enum MultiStreamLayout: String, CaseIterable, Identifiable {
         case .twoByTwo: return "2×2 Grid"
         case .threeByThree: return "3×3 Grid"
         case .fourByFour: return "4×4 Grid"
+        case .stacked: return "Stacked"
         }
     }
     
@@ -517,6 +519,7 @@ enum MultiStreamLayout: String, CaseIterable, Identifiable {
         case .twoByTwo: return 4
         case .threeByThree: return 9
         case .fourByFour: return 16
+        case .stacked: return 6 // Reasonable limit for stacked view
         }
     }
     
@@ -526,6 +529,7 @@ enum MultiStreamLayout: String, CaseIterable, Identifiable {
         case .twoByTwo: return 2
         case .threeByThree: return 3
         case .fourByFour: return 4
+        case .stacked: return 1 // Single column for stacked
         }
     }
     
@@ -535,6 +539,7 @@ enum MultiStreamLayout: String, CaseIterable, Identifiable {
         case .twoByTwo: return "grid"
         case .threeByThree: return "square.grid.3x3"
         case .fourByFour: return "square.grid.4x4"
+        case .stacked: return "rectangle.stack"
         }
     }
 }

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AVFoundation
+import WebKit
 
 // MARK: - Main Content View
 struct ContentView: View {
@@ -512,10 +513,10 @@ struct MultiStreamTabView: View {
     @State private var selectedSlotIndex = 0
     @State private var showingFullscreen = false
     @State private var fullscreenSlot: StreamSlot?
-    @State private var activeAudioSlotIndex: Int? = nil // Track which slot has audio enabled
+    @State private var activeAudioSlotIndex: Int? = nil
     
     enum LayoutType {
-        case single, grid2x2, grid3x3, pip
+        case single, grid2x2, grid3x3, pip, stacked
         
         var gridColumns: Int {
             switch self {
@@ -523,6 +524,7 @@ struct MultiStreamTabView: View {
             case .grid2x2: return 2
             case .grid3x3: return 3
             case .pip: return 2
+            case .stacked: return 1
             }
         }
         
@@ -532,6 +534,17 @@ struct MultiStreamTabView: View {
             case .grid2x2: return 4
             case .grid3x3: return 9
             case .pip: return 2
+            case .stacked: return 6 // Allow up to 6 streams in stacked view
+            }
+        }
+        
+        var icon: String {
+            switch self {
+            case .single: return "square"
+            case .grid2x2: return "square.grid.2x2"
+            case .grid3x3: return "square.grid.3x3"
+            case .pip: return "rectangle.inset.filled"
+            case .stacked: return "rectangle.stack"
             }
         }
     }
@@ -558,6 +571,34 @@ struct MultiStreamTabView: View {
                         
                         Spacer()
                         
+                        // Quick audio switcher
+                        if streamSlots.prefix(currentLayout.slotCount).filter({ $0.hasStream }).count > 1 {
+                            Menu {
+                                ForEach(0..<currentLayout.slotCount, id: \.self) { index in
+                                    if streamSlots[index].hasStream {
+                                        Button(action: {
+                                            activeAudioSlotIndex = (activeAudioSlotIndex == index) ? nil : index
+                                        }) {
+                                            Label(
+                                                streamSlots[index].displayStreamer,
+                                                systemImage: activeAudioSlotIndex == index ? "speaker.wave.2.fill" : "speaker.slash.fill"
+                                            )
+                                        }
+                                    }
+                                }
+                                Divider()
+                                Button(action: {
+                                    activeAudioSlotIndex = nil
+                                }) {
+                                    Label("Mute All", systemImage: "speaker.slash.fill")
+                                }
+                            } label: {
+                                Image(systemName: activeAudioSlotIndex != nil ? "speaker.wave.2.circle.fill" : "speaker.slash.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(activeAudioSlotIndex != nil ? .green : .white.opacity(0.6))
+                            }
+                        }
+                        
                         // Controls
                         HStack(spacing: 8) {
                             // Quick add stream button
@@ -580,6 +621,10 @@ struct MultiStreamTabView: View {
                                 currentLayout = .grid3x3
                                 updateStreamSlots()
                             }
+                            LayoutButton(layout: .stacked, current: currentLayout) {
+                                currentLayout = .stacked
+                                updateStreamSlots()
+                            }
                         }
                     }
                     .padding(.horizontal)
@@ -587,37 +632,100 @@ struct MultiStreamTabView: View {
                     
                     // Stream Grid
                     GeometryReader { geometry in
-                        let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: currentLayout.gridColumns)
                         let availableHeight = geometry.size.height - 16 // Account for padding
                         let availableWidth = geometry.size.width - 16
                         
-                        // Calculate appropriate height for each stream slot
-                        let slotHeight: CGFloat = {
-                            switch currentLayout {
-                            case .grid2x2:
-                                return (availableHeight - 8) / 2 // 8 for spacing between rows
-                            case .grid3x3:
-                                return (availableHeight - 16) / 3 // 16 for spacing between rows
-                            default:
-                                return availableHeight
-                            }
-                        }()
-                        
-                        LazyVGrid(columns: columns, spacing: 8) {
-                            ForEach(0..<currentLayout.slotCount, id: \.self) { index in
-                                StreamSlotView(
-                                    slot: index < streamSlots.count ? streamSlots[index] : StreamSlot(),
-                                    slotIndex: index,
-                                    isMuted: isSlotMuted(index),
-                                    onTap: {
-                                        selectedSlotIndex = index
-                                        showingStreamPicker = true
-                                    },
-                                    onToggleMute: {
-                                        toggleExclusiveAudio(for: index)
+                        if currentLayout == .stacked {
+                            // Stacked layout with vertical scrolling
+                            ScrollView(.vertical, showsIndicators: false) {
+                                VStack(spacing: 16) {
+                                    ForEach(0..<currentLayout.slotCount, id: \.self) { index in
+                                        let isAudioActive = activeAudioSlotIndex == index
+                                        StreamSlotView(
+                                            slot: $streamSlots[index],
+                                            slotIndex: index,
+                                            onTap: {
+                                                selectedSlotIndex = index
+                                                showingStreamPicker = true
+                                            },
+                                            onRemove: {
+                                                streamSlots[index] = StreamSlot()
+                                                if activeAudioSlotIndex == index {
+                                                    activeAudioSlotIndex = nil
+                                                }
+                                            },
+                                            onToggleAudio: {
+                                                // Only one stream can have audio at a time
+                                                if activeAudioSlotIndex == index {
+                                                    activeAudioSlotIndex = nil
+                                                } else {
+                                                    activeAudioSlotIndex = index
+                                                }
+                                            },
+                                            isAudioActive: isAudioActive,
+                                            fullscreenSlot: $fullscreenSlot,
+                                            showingFullscreen: $showingFullscreen
+                                        )
+                                        .frame(height: (availableWidth - 32) * (9.0/16.0)) // 16:9 aspect ratio
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(isAudioActive ? Color.green : Color.clear, lineWidth: 3)
+                                        )
+                                        .animation(.easeInOut(duration: 0.2), value: isAudioActive)
                                     }
-                                )
-                                .frame(height: slotHeight)
+                                }
+                                .padding(8)
+                            }
+                        } else {
+                            // Grid layouts
+                            let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: currentLayout.gridColumns)
+                            
+                            // Calculate appropriate height for each stream slot
+                            let slotHeight: CGFloat = {
+                                switch currentLayout {
+                                case .grid2x2:
+                                    return (availableHeight - 8) / 2 // 8 for spacing between rows
+                                case .grid3x3:
+                                    return (availableHeight - 16) / 3 // 16 for spacing between rows
+                                default:
+                                    return availableHeight
+                                }
+                            }()
+                            
+                            LazyVGrid(columns: columns, spacing: 8) {
+                                ForEach(0..<currentLayout.slotCount, id: \.self) { index in
+                                    let isAudioActive = activeAudioSlotIndex == index
+                                    StreamSlotView(
+                                        slot: $streamSlots[index],
+                                        slotIndex: index,
+                                        onTap: {
+                                            selectedSlotIndex = index
+                                            showingStreamPicker = true
+                                        },
+                                        onRemove: {
+                                            streamSlots[index] = StreamSlot()
+                                            if activeAudioSlotIndex == index {
+                                                activeAudioSlotIndex = nil
+                                            }
+                                        },
+                                        onToggleAudio: {
+                                            // Only one stream can have audio at a time
+                                            if activeAudioSlotIndex == index {
+                                                activeAudioSlotIndex = nil
+                                            } else {
+                                                activeAudioSlotIndex = index
+                                            }
+                                        },
+                                        isAudioActive: isAudioActive,
+                                        fullscreenSlot: $fullscreenSlot,
+                                        showingFullscreen: $showingFullscreen
+                                    )
+                                    .frame(height: slotHeight)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(isAudioActive ? Color.green : Color.clear, lineWidth: 3)
+                                    )
+                                    .animation(.easeInOut(duration: 0.2), value: isAudioActive)
                                 .contextMenu {
                                     if index < streamSlots.count && streamSlots[index].hasStream {
                                         Button("Replace Stream") {
@@ -627,8 +735,12 @@ struct MultiStreamTabView: View {
                                         Button("Remove Stream") {
                                             streamSlots[index] = StreamSlot()
                                         }
-                                        Button(isSlotMuted(index) ? "Unmute" : "Mute") {
-                                            toggleExclusiveAudio(for: index)
+                                        Button(activeAudioSlotIndex == index ? "Mute" : "Unmute") {
+                                            if activeAudioSlotIndex == index {
+                                                activeAudioSlotIndex = nil
+                                            } else {
+                                                activeAudioSlotIndex = index
+                                            }
                                         }
                                     } else {
                                         Button("Add Stream") {
@@ -639,8 +751,9 @@ struct MultiStreamTabView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 8)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 8)
+                        } // Close else block for grid layouts
                     }
                 }
             }
@@ -648,23 +761,54 @@ struct MultiStreamTabView: View {
             .sheet(isPresented: $showingStreamPicker) {
                 StreamPickerView(selectedSlot: $selectedSlotIndex, streamSlots: $streamSlots)
             }
+            .fullScreenCover(isPresented: $showingFullscreen) {
+                FullscreenStreamView(
+                    slot: fullscreenSlot ?? StreamSlot(),
+                    isPresented: $showingFullscreen,
+                    activeAudioSlotIndex: $activeAudioSlotIndex,
+                    currentSlotIndex: streamSlots.firstIndex(where: { $0.id == fullscreenSlot?.id }) ?? 0
+                )
+            }
+            .onAppear {
+                setupKeyboardShortcuts()
+            }
         }
+    }
+    
+    private func setupKeyboardShortcuts() {
+        #if os(iOS)
+        // iOS doesn't support keyboard shortcuts in the same way as macOS
+        // We'll use gesture recognizers or other methods for iOS
+        #else
+        // macOS keyboard shortcuts would go here
+        #endif
     }
     
     private func updateStreamSlots() {
         let neededSlots = currentLayout.slotCount
+        let previousActiveStreamId = activeAudioSlotIndex.flatMap { 
+            $0 < streamSlots.count ? streamSlots[$0].twitchStream?.id : nil 
+        }
+        
         if streamSlots.count < neededSlots {
             streamSlots.append(contentsOf: Array(repeating: StreamSlot(), count: neededSlots - streamSlots.count))
+        }
+        
+        // Restore audio state to the same stream if it still exists
+        if let streamId = previousActiveStreamId {
+            activeAudioSlotIndex = streamSlots.firstIndex { $0.twitchStream?.id == streamId }
         }
     }
     
     private func toggleExclusiveAudio(for slotIndex: Int) {
-        // If this slot is already the active audio slot, mute it
-        if activeAudioSlotIndex == slotIndex {
-            activeAudioSlotIndex = nil
-        } else {
-            // Otherwise, make this slot the only unmuted one
-            activeAudioSlotIndex = slotIndex
+        withAnimation(.easeInOut(duration: 0.3)) {
+            // If this slot is already the active audio slot, mute it
+            if activeAudioSlotIndex == slotIndex {
+                activeAudioSlotIndex = nil
+            } else {
+                // Otherwise, make this slot the only unmuted one
+                activeAudioSlotIndex = slotIndex
+            }
         }
     }
     
@@ -910,8 +1054,6 @@ struct ModernMainView: View {
 
 // MARK: - Supporting Types and Views
 
-import WebKit
-
 struct TwitchStreamPlayer: UIViewRepresentable {
     let channelName: String
     @Binding var isMuted: Bool
@@ -974,27 +1116,53 @@ struct TwitchStreamPlayer: UIViewRepresentable {
         try {
             console.log('🔊 SwiftUI requesting mute state change to:', \(isMuted));
             
+            // Fade audio function
+            function fadeAudio(player, targetVolume, duration) {
+                if (!player || typeof player.getVolume !== 'function') return;
+                
+                var startVolume = player.getVolume();
+                var volumeStep = (targetVolume - startVolume) / (duration / 50);
+                var currentVolume = startVolume;
+                
+                var fadeInterval = setInterval(function() {
+                    currentVolume += volumeStep;
+                    if ((volumeStep > 0 && currentVolume >= targetVolume) || 
+                        (volumeStep < 0 && currentVolume <= targetVolume)) {
+                        currentVolume = targetVolume;
+                        clearInterval(fadeInterval);
+                        if (targetVolume === 0) {
+                            player.setMuted(true);
+                        }
+                    }
+                    player.setVolume(currentVolume);
+                }, 50);
+            }
+            
             // IMPORTANT: Only update mute state, never reload the player
             if (window.updateMute && typeof window.updateMute === 'function') {
                 console.log('🔊 Using window.updateMute function');
                 window.updateMute(\(isMuted));
             } else if (window.twitchPlayer && typeof window.twitchPlayer.setMuted === 'function') {
-                console.log('🔊 Using direct twitchPlayer.setMuted');
-                window.twitchPlayer.setMuted(\(isMuted));
-                if (!\(isMuted) && typeof window.twitchPlayer.setVolume === 'function') {
-                    window.twitchPlayer.setVolume(0.7);
-                    console.log('🔊 Set volume to 0.7');
+                console.log('🔊 Using direct twitchPlayer.setMuted with fade');
+                if (\(isMuted)) {
+                    fadeAudio(window.twitchPlayer, 0, 300);
+                } else {
+                    window.twitchPlayer.setMuted(false);
+                    window.twitchPlayer.setVolume(0);
+                    fadeAudio(window.twitchPlayer, 0.7, 300);
                 }
             } else if (window.twitchEmbedPlayer && typeof window.twitchEmbedPlayer.getPlayer === 'function') {
-                console.log('🔊 Using embed player');
+                console.log('🔊 Using embed player with fade');
                 var videoPlayer = window.twitchEmbedPlayer.getPlayer();
                 if (videoPlayer && typeof videoPlayer.setMuted === 'function') {
-                    videoPlayer.setMuted(\(isMuted));
-                    if (!\(isMuted) && typeof videoPlayer.setVolume === 'function') {
-                        videoPlayer.setVolume(0.7);
-                        console.log('🔊 Set embed volume to 0.7');
+                    if (\(isMuted)) {
+                        fadeAudio(videoPlayer, 0, 300);
+                    } else {
+                        videoPlayer.setMuted(false);
+                        videoPlayer.setVolume(0);
+                        fadeAudio(videoPlayer, 0.7, 300);
                     }
-                    }
+                }
             } else {
                 console.log('🔊 No player instances available for mute control');
                 // DO NOT reload iframe - just log that mute control is not available
@@ -1100,8 +1268,8 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                                     hideStatus();
                                 });
                                 
-                                player.addEventListener(Twitch.Embed.VIDEO_ERROR, function() {
-                                    console.log('❌ Embed API failed, trying next method');
+                                player.addEventListener(Twitch.Embed.VIDEO_ERROR, function(error) {
+                                    console.log('❌ Embed API failed:', error, '- trying next method');
                                     tryNextMethod();
                                 });
                                 
@@ -1159,7 +1327,7 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                                 setTimeout(function() {
                                     console.log('✅ Direct iframe timeout - hiding status');
                                     hideStatus();
-                                }, 2000); // Reduced to 2 seconds for better UX
+                                }, 3000); // Give more time for stream to load
                             }
                             return true;
                         }
@@ -1209,7 +1377,7 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                                 setTimeout(function() {
                                     console.log('✅ Fallback iframe timeout - hiding status');
                                     hideStatus();
-                                }, 2000);
+                                }, 3000);
                             }
                             return true;
                         }
@@ -1228,7 +1396,11 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                 ];
                 
                 function hideStatus() {
-                    status.style.display = 'none';
+                    if (status) {
+                        status.style.display = 'none';
+                        status.style.visibility = 'hidden';
+                        status.style.opacity = '0';
+                    }
                 }
                 
                 function showError() {
@@ -1240,7 +1412,7 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                     if (currentMethod < streamingMethods.length) {
                         var method = streamingMethods[currentMethod];
                         console.log('🔄 Trying method: ' + method.name);
-                        status.innerHTML = 'Loading (' + (currentMethod + 1) + '/' + streamingMethods.length + ')...';
+                        status.innerHTML = 'Connecting to stream...';
                         
                         if (method.execute()) {
                             currentMethod++;
@@ -1262,28 +1434,56 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                     }
                 }
                 
-                // Enhanced mute control functions - NO RELOADING
+                // Enhanced mute control functions with fade - NO RELOADING
                 window.updateMute = function(muted) {
                     console.log('🔊 Setting mute to:', muted);
                     
+                    // Fade audio function
+                    function fadeAudio(player, targetVolume, duration) {
+                        if (!player || typeof player.getVolume !== 'function') return;
+                        
+                        var startVolume = player.getVolume();
+                        var volumeStep = (targetVolume - startVolume) / (duration / 50);
+                        var currentVolume = startVolume;
+                        
+                        var fadeInterval = setInterval(function() {
+                            currentVolume += volumeStep;
+                            if ((volumeStep > 0 && currentVolume >= targetVolume) || 
+                                (volumeStep < 0 && currentVolume <= targetVolume)) {
+                                currentVolume = targetVolume;
+                                clearInterval(fadeInterval);
+                                if (targetVolume === 0) {
+                                    player.setMuted(true);
+                                }
+                            }
+                            player.setVolume(currentVolume);
+                        }, 50);
+                    }
+                    
                     // Try Twitch Embed API video player first
                     if (window.twitchPlayer && typeof window.twitchPlayer.setMuted === 'function') {
-                        console.log('🔊 Using Twitch video player setMuted');
-                        window.twitchPlayer.setMuted(muted);
-                        if (!muted && typeof window.twitchPlayer.setVolume === 'function') {
-                            window.twitchPlayer.setVolume(0.7); // Set reasonable volume when unmuting
+                        console.log('🔊 Using Twitch video player with fade');
+                        if (muted) {
+                            fadeAudio(window.twitchPlayer, 0, 300);
+                        } else {
+                            window.twitchPlayer.setMuted(false);
+                            window.twitchPlayer.setVolume(0);
+                            fadeAudio(window.twitchPlayer, 0.7, 300);
                         }
                         return;
                     }
                     
                     // Try Twitch Embed instance
                     if (window.twitchEmbedPlayer && typeof window.twitchEmbedPlayer.getPlayer === 'function') {
-                        console.log('🔊 Using Twitch embed player setMuted');
+                        console.log('🔊 Using Twitch embed player with fade');
                         var videoPlayer = window.twitchEmbedPlayer.getPlayer();
                         if (videoPlayer && typeof videoPlayer.setMuted === 'function') {
-                            videoPlayer.setMuted(muted);
-                            if (!muted && typeof videoPlayer.setVolume === 'function') {
-                                videoPlayer.setVolume(0.7);
+                            if (muted) {
+                                fadeAudio(videoPlayer, 0, 300);
+                            } else {
+                                videoPlayer.setMuted(false);
+                                videoPlayer.setVolume(0);
+                                fadeAudio(videoPlayer, 0.7, 300);
                             }
                             return;
                         }
@@ -1297,6 +1497,14 @@ struct TwitchStreamPlayer: UIViewRepresentable {
                 
                 // Start trying methods
                 setTimeout(tryNextMethod, 100);
+                
+                // Global timeout to ensure loading message is hidden
+                setTimeout(function() {
+                    if (status && status.style.display !== 'none') {
+                        console.log('⏰ Global timeout reached - force hiding status');
+                        hideStatus();
+                    }
+                }, 8000); // 8 seconds max wait time
                 
             </script>
         </body>
@@ -1346,10 +1554,19 @@ struct ContentViewStream {
 }
 
 struct StreamSlot {
+    let id = UUID()
     var stream: ContentViewStream?
     var twitchStream: TwitchStream?
     var isActive: Bool = false
     var volume: Double = 1.0
+    var streamState: StreamState = .idle
+    
+    enum StreamState {
+        case idle
+        case loading
+        case playing
+        case error(String)
+    }
     
     var hasStream: Bool {
         return stream != nil || twitchStream != nil
@@ -1371,11 +1588,12 @@ struct StreamSlot {
         return twitchStream?.thumbnailUrlMedium ?? stream?.thumbnailUrl ?? ""
     }
     
-    init(stream: ContentViewStream? = nil, twitchStream: TwitchStream? = nil, isActive: Bool = false, volume: Double = 1.0) {
+    init(stream: ContentViewStream? = nil, twitchStream: TwitchStream? = nil, isActive: Bool = false, volume: Double = 1.0, streamState: StreamState = .idle) {
         self.stream = stream
         self.twitchStream = twitchStream
         self.isActive = isActive
         self.volume = volume
+        self.streamState = streamState
     }
 }
 
@@ -1502,19 +1720,28 @@ struct ContentStreamCard: View {
 }
 
 struct StreamSlotView: View {
-    let slot: StreamSlot
+    @Binding var slot: StreamSlot
     let slotIndex: Int
-    let isMuted: Bool
     let onTap: () -> Void
-    let onToggleMute: () -> Void
+    let onRemove: () -> Void
+    let onToggleAudio: () -> Void
+    let isAudioActive: Bool
+    @Binding var fullscreenSlot: StreamSlot?
+    @Binding var showingFullscreen: Bool
     @State private var showOverlay = true
+    @State private var currentQuality: StreamQuality = .auto
+    @State private var isRefreshing = false
     
-    init(slot: StreamSlot, slotIndex: Int, isMuted: Bool, onTap: @escaping () -> Void, onToggleMute: @escaping () -> Void) {
-        self.slot = slot
-        self.slotIndex = slotIndex
-        self.isMuted = isMuted
-        self.onTap = onTap
-        self.onToggleMute = onToggleMute
+    enum StreamQuality: String {
+        case source = "source"
+        case high = "720p"
+        case medium = "480p"
+        case low = "360p"
+        case auto = "auto"
+    }
+    
+    var isMuted: Bool {
+        return !isAudioActive
     }
     
     var body: some View {
@@ -1526,10 +1753,7 @@ struct StreamSlotView: View {
                     if let twitchStream = slot.twitchStream {
                         TwitchStreamPlayer(
                             channelName: twitchStream.userLogin,
-                            isMuted: Binding(
-                                get: { isMuted },
-                                set: { _ in onToggleMute() }
-                            )
+                            isMuted: .constant(isMuted)
                         )
                         .clipped()
                     } else if let stream = slot.stream {
@@ -1558,6 +1782,10 @@ struct StreamSlotView: View {
                                 showOverlay.toggle()
                             }
                         }
+                        .onTapGesture(count: 2) {
+                            // Double tap to toggle audio
+                            onToggleAudio()
+                        }
                     
                     // Stream info overlay (shows/hides on tap)
                     if showOverlay {
@@ -1582,9 +1810,21 @@ struct StreamSlotView: View {
                                 // Audio indicator (only show when this stream has audio)
                                 if !isMuted {
                                     HStack(spacing: 4) {
-                                        Image(systemName: "speaker.wave.2.fill")
-                                            .font(.caption2)
-                                            .foregroundColor(.green)
+                                        // Animated audio wave indicator
+                                        HStack(spacing: 2) {
+                                            ForEach(0..<3, id: \.self) { index in
+                                                RoundedRectangle(cornerRadius: 2)
+                                                    .fill(Color.green)
+                                                    .frame(width: 3, height: 12)
+                                                    .scaleEffect(y: !isMuted ? 1.0 : 0.3, anchor: .bottom)
+                                                    .animation(
+                                                        Animation.easeInOut(duration: 0.5)
+                                                            .repeatForever(autoreverses: true)
+                                                            .delay(Double(index) * 0.1),
+                                                        value: !isMuted
+                                                    )
+                                            }
+                                        }
                                         Text("AUDIO")
                                             .font(.caption2)
                                             .fontWeight(.bold)
@@ -1594,6 +1834,7 @@ struct StreamSlotView: View {
                                     .padding(.vertical, 4)
                                     .background(Color.green.opacity(0.8))
                                     .cornerRadius(4)
+                                    .shadow(color: Color.green.opacity(0.6), radius: 4)
                                 }
                                 
                                 Spacer()
@@ -1601,18 +1842,32 @@ struct StreamSlotView: View {
                                 // Controls
                                 HStack(spacing: 8) {
                                     Button {
-                                        onToggleMute()
+                                        onToggleAudio()
                                     } label: {
-                                        Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                                            .font(.caption)
-                                            .foregroundColor(isMuted ? .red : .green)
-                                            .frame(width: 24, height: 24)
-                                            .background(isMuted ? Color.red.opacity(0.2) : Color.green.opacity(0.2))
-                                            .clipShape(Circle())
+                                        ZStack {
+                                            Circle()
+                                                .fill(isMuted ? Color.white.opacity(0.2) : Color.green.opacity(0.2))
+                                                .frame(width: 32, height: 32)
+                                            
+                                            Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                                                .font(.system(size: 14, weight: .medium))
+                                                .foregroundColor(isMuted ? .white : .green)
+                                                .scaleEffect(isMuted ? 1.0 : 1.1)
+                                                .animation(.easeInOut(duration: 0.2), value: isMuted)
+                                        }
+                                        .overlay(
+                                            Circle()
+                                                .stroke(isMuted ? Color.white.opacity(0.3) : Color.green.opacity(0.8), lineWidth: 1.5)
+                                                .scaleEffect(isMuted ? 1.0 : 1.15)
+                                                .opacity(isMuted ? 1.0 : 0.0)
+                                                .animation(.easeOut(duration: 0.3), value: isMuted)
+                                        )
                                     }
+                                    .buttonStyle(ScaleButtonStyle())
                                     
                                     Button {
-                                        // Fullscreen action - will be implemented
+                                        fullscreenSlot = slot
+                                        showingFullscreen = true
                                     } label: {
                                         Image(systemName: "arrow.up.left.and.arrow.down.right")
                                             .font(.caption)
@@ -1623,13 +1878,13 @@ struct StreamSlotView: View {
                                     }
                                     
                                     Button {
-                                        onTap()
+                                        onRemove()
                                     } label: {
-                                        Image(systemName: "ellipsis")
+                                        Image(systemName: "xmark")
                                             .font(.caption)
                                             .foregroundColor(.white)
                                             .frame(width: 24, height: 24)
-                                            .background(Color.black.opacity(0.7))
+                                            .background(Color.red.opacity(0.7))
                                             .clipShape(Circle())
                                     }
                                 }
@@ -1638,65 +1893,153 @@ struct StreamSlotView: View {
                             Spacer()
                             
                             // Bottom info
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(slot.displayStreamer)
-                                        .font(.caption)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.white)
-                                    Text("\(slot.displayViewerCount) viewers")
-                                        .font(.caption2)
-                                        .foregroundColor(.white.opacity(0.8))
+                            VStack(spacing: 0) {
+                                // Stream info bar
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(slot.displayStreamer)
+                                            .font(.caption)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.white)
+                                            .lineLimit(1)
+                                        
+                                        HStack(spacing: 8) {
+                                            // Viewer count
+                                            HStack(spacing: 3) {
+                                                Image(systemName: "eye.fill")
+                                                    .font(.system(size: 10))
+                                                Text(formatViewerCount(slot.displayViewerCount))
+                                            }
+                                            .font(.caption2)
+                                            .foregroundColor(.white.opacity(0.8))
+                                            
+                                            // Game/Category
+                                            if let game = slot.twitchStream?.gameName {
+                                                Text("•")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.white.opacity(0.5))
+                                                Text(game)
+                                                    .font(.caption2)
+                                                    .foregroundColor(.white.opacity(0.8))
+                                                    .lineLimit(1)
+                                            }
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    // Quick actions
+                                    HStack(spacing: 6) {
+                                        // Refresh button
+                                        Button {
+                                            refreshStream(at: slotIndex)
+                                        } label: {
+                                            Image(systemName: "arrow.clockwise")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.white.opacity(0.8))
+                                                .frame(width: 20, height: 20)
+                                                .background(Color.white.opacity(0.1))
+                                                .clipShape(Circle())
+                                        }
+                                        
+                                        // Quality selector
+                                        Menu {
+                                            Button("Source") { setStreamQuality(.source) }
+                                            Button("720p") { setStreamQuality(.high) }
+                                            Button("480p") { setStreamQuality(.medium) }
+                                            Button("360p") { setStreamQuality(.low) }
+                                            Button("Auto") { setStreamQuality(.auto) }
+                                        } label: {
+                                            Image(systemName: "slider.horizontal.3")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.white.opacity(0.8))
+                                                .frame(width: 20, height: 20)
+                                                .background(Color.white.opacity(0.1))
+                                                .clipShape(Circle())
+                                        }
+                                    }
                                 }
-                                Spacer()
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                            .background(
-                                LinearGradient(
-                                    colors: [.clear, .black.opacity(0.7)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.clear, .black.opacity(0.8)],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
                                 )
-                            )
+                            }
                         }
                         .padding(8)
                         .transition(.opacity)
                     }
                 }
             } else {
-                // Empty slot
+                // Empty slot with improved design
                 Button(action: onTap) {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.15))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.white.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [8, 8]))
-                        )
-                        .overlay(
-                            VStack(spacing: 16) {
+                    ZStack {
+                        // Background gradient
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.purple.opacity(0.1),
+                                        Color.cyan.opacity(0.05)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                        
+                        // Animated border
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [Color.purple.opacity(0.4), Color.cyan.opacity(0.4)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                style: StrokeStyle(lineWidth: 2, dash: [10, 5])
+                            )
+                        
+                        // Content
+                        VStack(spacing: 16) {
+                            // Animated icon
+                            ZStack {
                                 Circle()
-                                    .fill(Color.purple.opacity(0.2))
-                                    .frame(width: 80, height: 80)
-                                    .overlay(
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 32, weight: .medium))
-                                            .foregroundColor(.purple)
+                                    .fill(
+                                        RadialGradient(
+                                            colors: [Color.purple.opacity(0.3), Color.clear],
+                                            center: .center,
+                                            startRadius: 0,
+                                            endRadius: 40
+                                        )
                                     )
+                                    .frame(width: 80, height: 80)
+                                    .blur(radius: 10)
                                 
-                                VStack(spacing: 4) {
-                                    Text("Add Stream")
-                                        .font(.headline)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.white)
-                                    Text("Tap to browse streams")
-                                        .font(.subheadline)
-                                        .foregroundColor(.white.opacity(0.6))
-                                }
+                                Circle()
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                    .frame(width: 60, height: 60)
+                                
+                                Image(systemName: "plus")
+                                    .font(.system(size: 28, weight: .medium))
+                                    .foregroundColor(.white)
                             }
-                        )
+                            
+                            VStack(spacing: 6) {
+                                Text("Add Stream")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.white)
+                                
+                                Text("Browse live channels")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                        }
+                    }
                 }
-                .buttonStyle(PlainButtonStyle())
+                .buttonStyle(ScaleButtonStyle())
             }
         }
         .cornerRadius(8)
@@ -1714,6 +2057,33 @@ struct StreamSlotView: View {
                 }
             }
         }
+    }
+    
+    private func formatViewerCount(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000)
+        } else if count >= 1_000 {
+            return String(format: "%.1fK", Double(count) / 1_000)
+        }
+        return "\(count)"
+    }
+    
+    private func refreshStream(at index: Int) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            isRefreshing = true
+        }
+        
+        // Simulate refresh - in real app, this would reload the stream
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                isRefreshing = false
+            }
+        }
+    }
+    
+    private func setStreamQuality(_ quality: StreamQuality) {
+        currentQuality = quality
+        // In real implementation, this would update the stream quality
     }
 }
 
@@ -1739,8 +2109,9 @@ struct LayoutButton: View {
         switch layout {
         case .single: return "square"
         case .grid2x2: return "rectangle.split.2x2"
-        case .grid3x3: return "rectangle.split.3x3"
+        case .grid3x3: return "rectangle.split.3x3"  
         case .pip: return "pip"
+        case .stacked: return "rectangle.stack"
         }
     }
 }
@@ -1751,46 +2122,135 @@ struct StreamPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var twitchService = RealTwitchAPIService.shared
     @State private var availableStreams: [TwitchStream] = []
+    @State private var filteredStreams: [TwitchStream] = []
     @State private var isLoading = false
+    @State private var searchText = ""
+    @State private var selectedCategory = "All"
+    
+    let categories = ["All", "Gaming", "Just Chatting", "Music", "Art", "Sports"]
     
     var body: some View {
         NavigationView {
             ZStack {
-                Color.black.ignoresSafeArea()
+                // Background
+                LinearGradient(
+                    colors: [
+                        Color.black,
+                        Color(red: 0.05, green: 0.05, blue: 0.1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
                 
-                ScrollView {
-                    if isLoading {
-                        VStack {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
-                            Text("Loading streams...")
-                                .foregroundColor(.white.opacity(0.7))
-                                .padding(.top)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding()
-                    } else {
-                        LazyVGrid(columns: [
-                            GridItem(.flexible()),
-                            GridItem(.flexible())
-                        ], spacing: 12) {
-                            ForEach(availableStreams, id: \.id) { stream in
+                VStack(spacing: 0) {
+                    // Search and filter bar
+                    VStack(spacing: 12) {
+                        // Search field
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.white.opacity(0.6))
+                            
+                            TextField("Search streams...", text: $searchText)
+                                .foregroundColor(.white)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                            
+                            if !searchText.isEmpty {
                                 Button {
-                                    if selectedSlot < streamSlots.count {
-                                        streamSlots[selectedSlot] = StreamSlot(twitchStream: stream, isActive: true)
-                                    }
-                                    dismiss()
+                                    searchText = ""
                                 } label: {
-                                    TwitchStreamCard(stream: stream)
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.white.opacity(0.6))
                                 }
-                                .buttonStyle(PlainButtonStyle())
                             }
                         }
-                        .padding()
+                        .padding(12)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(10)
+                        
+                        // Category filter
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(categories, id: \.self) { category in
+                                    Button {
+                                        selectedCategory = category
+                                    } label: {
+                                        Text(category)
+                                            .font(.caption)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(selectedCategory == category ? .black : .white)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+                                            .background(
+                                                Capsule()
+                                                    .fill(selectedCategory == category ? Color.cyan : Color.white.opacity(0.15))
+                                            )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color.black.opacity(0.3))
+                    
+                    // Streams grid
+                    ScrollView {
+                        if isLoading {
+                            VStack(spacing: 20) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
+                                    .scaleEffect(1.2)
+                                
+                                Text("Discovering live streams...")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                
+                                Text("This may take a moment")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(.top, 100)
+                        } else if filteredStreams.isEmpty {
+                            VStack(spacing: 16) {
+                                Image(systemName: "tv.slash")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.white.opacity(0.3))
+                                
+                                Text("No streams found")
+                                    .font(.headline)
+                                    .foregroundColor(.white.opacity(0.7))
+                                
+                                Text("Try adjusting your search or filters")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(.top, 100)
+                        } else {
+                            LazyVGrid(columns: [
+                                GridItem(.flexible(), spacing: 12),
+                                GridItem(.flexible(), spacing: 12)
+                            ], spacing: 12) {
+                                ForEach(filteredStreams, id: \.id) { stream in
+                                    Button {
+                                        if selectedSlot < streamSlots.count {
+                                            streamSlots[selectedSlot] = StreamSlot(twitchStream: stream, isActive: true, streamState: .loading)
+                                        }
+                                        dismiss()
+                                    } label: {
+                                        EnhancedStreamCard(stream: stream)
+                                    }
+                                    .buttonStyle(ScaleButtonStyle())
+                                }
+                            }
+                            .padding()
+                        }
                     }
                 }
             }
-            .navigationTitle("Choose Stream")
+            .navigationTitle("Live Streams")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -1803,17 +2263,178 @@ struct StreamPickerView: View {
             .onAppear {
                 loadStreams()
             }
+            .onChange(of: searchText) { _ in
+                filterStreams()
+            }
+            .onChange(of: selectedCategory) { _ in
+                filterStreams()
+            }
         }
     }
     
     private func loadStreams() {
         isLoading = true
         Task {
-            let result = await twitchService.getTopStreams(first: 40)
+            let result = await twitchService.getTopStreams(first: 50)
             await MainActor.run {
                 availableStreams = result.streams
+                filteredStreams = result.streams
                 isLoading = false
             }
+        }
+    }
+    
+    private func filterStreams() {
+        var filtered = availableStreams
+        
+        // Search filter
+        if !searchText.isEmpty {
+            filtered = filtered.filter { stream in
+                stream.userName.localizedCaseInsensitiveContains(searchText) ||
+                stream.title.localizedCaseInsensitiveContains(searchText) ||
+                stream.gameName.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+        
+        // Category filter
+        if selectedCategory != "All" {
+            filtered = filtered.filter { stream in
+                // Simple category matching - in real app, this would be more sophisticated
+                switch selectedCategory {
+                case "Gaming":
+                    return !stream.gameName.lowercased().contains("just chatting") &&
+                           !stream.gameName.lowercased().contains("music") &&
+                           !stream.gameName.lowercased().contains("art")
+                case "Just Chatting":
+                    return stream.gameName.lowercased().contains("just chatting") ||
+                           stream.gameName.lowercased().contains("talk")
+                case "Music":
+                    return stream.gameName.lowercased().contains("music") ||
+                           stream.gameName.lowercased().contains("singing")
+                case "Art":
+                    return stream.gameName.lowercased().contains("art") ||
+                           stream.gameName.lowercased().contains("creative")
+                case "Sports":
+                    return stream.gameName.lowercased().contains("sports") ||
+                           stream.gameName.lowercased().contains("football") ||
+                           stream.gameName.lowercased().contains("basketball")
+                default:
+                    return true
+                }
+            }
+        }
+        
+        filteredStreams = filtered
+    }
+}
+
+struct EnhancedStreamCard: View {
+    let stream: TwitchStream
+    @State private var isHovered = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Thumbnail with overlay
+            ZStack(alignment: .bottomLeading) {
+                AsyncImage(url: URL(string: stream.thumbnailUrlMedium)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(16/9, contentMode: .fill)
+                } placeholder: {
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.purple.opacity(0.3), Color.cyan.opacity(0.3)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        )
+                }
+                .frame(height: 110)
+                .clipped()
+                
+                // Live badge
+                HStack {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 6, height: 6)
+                        Text("LIVE")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.red)
+                    .cornerRadius(4)
+                    
+                    Spacer()
+                    
+                    // Viewer count
+                    HStack(spacing: 3) {
+                        Image(systemName: "eye.fill")
+                            .font(.system(size: 10))
+                        Text(stream.formattedViewerCount)
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(4)
+                }
+                .padding(8)
+            }
+            
+            // Stream info
+            VStack(alignment: .leading, spacing: 6) {
+                Text(stream.userName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                
+                Text(stream.title)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.8))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                HStack {
+                    Text(stream.gameName)
+                        .font(.system(size: 11))
+                        .foregroundColor(.cyan)
+                        .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+            }
+            .padding(12)
+        }
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(
+                    LinearGradient(
+                        colors: isHovered ? [Color.purple, Color.cyan] : [Color.white.opacity(0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: isHovered ? 2 : 1
+                )
+        )
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
         }
     }
 }
@@ -1840,6 +2461,131 @@ struct StatCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(.ultraThinMaterial)
         )
+    }
+}
+
+struct FullscreenStreamView: View {
+    let slot: StreamSlot
+    @Binding var isPresented: Bool
+    @Binding var activeAudioSlotIndex: Int?
+    let currentSlotIndex: Int
+    @State private var showControls = true
+    @State private var controlsTimer: Timer?
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            if let twitchStream = slot.twitchStream {
+                TwitchStreamPlayer(
+                    channelName: twitchStream.userLogin,
+                    isMuted: .constant(activeAudioSlotIndex != currentSlotIndex)
+                )
+                .ignoresSafeArea()
+            }
+            
+            // Controls overlay
+            if showControls {
+                VStack {
+                    // Top bar
+                    HStack {
+                        Button {
+                            isPresented = false
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 16, weight: .medium))
+                                Text("Exit Fullscreen")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.black.opacity(0.6))
+                            .cornerRadius(25)
+                        }
+                        
+                        Spacer()
+                        
+                        // Stream info
+                        if let twitchStream = slot.twitchStream {
+                            VStack(alignment: .trailing) {
+                                Text(twitchStream.userName)
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Text("\(twitchStream.formattedViewerCount) viewers")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.6))
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding()
+                    
+                    Spacer()
+                    
+                    // Bottom controls
+                    HStack(spacing: 20) {
+                        // Audio toggle
+                        Button {
+                            if activeAudioSlotIndex == currentSlotIndex {
+                                activeAudioSlotIndex = nil
+                            } else {
+                                activeAudioSlotIndex = currentSlotIndex
+                            }
+                        } label: {
+                            Image(systemName: activeAudioSlotIndex == currentSlotIndex ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.white)
+                                .frame(width: 50, height: 50)
+                                .background(
+                                    Circle()
+                                        .fill(activeAudioSlotIndex == currentSlotIndex ? Color.green.opacity(0.3) : Color.white.opacity(0.2))
+                                )
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 30)
+                    .padding(.bottom, 40)
+                }
+                .transition(.opacity)
+            }
+        }
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showControls.toggle()
+            }
+            resetControlsTimer()
+        }
+        .onAppear {
+            resetControlsTimer()
+        }
+        .onDisappear {
+            controlsTimer?.invalidate()
+        }
+    }
+    
+    private func resetControlsTimer() {
+        controlsTimer?.invalidate()
+        if showControls {
+            controlsTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showControls = false
+                }
+            }
+        }
+    }
+}
+
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 

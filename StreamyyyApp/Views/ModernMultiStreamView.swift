@@ -11,7 +11,7 @@ import Combine
 
 struct ModernMultiStreamView: View {
     @StateObject private var streamManager = MultiStreamManager()
-    @StateObject private var audioManager = MultiStreamAudioManager.shared
+    @StateObject private var audioManager = SimplifiedAudioManager.shared
     @State private var showingStreamPicker = false
     @State private var selectedSlotIndex = 0
     @State private var showingQualityControl = false
@@ -148,8 +148,18 @@ struct ModernMultiStreamView: View {
                 // Quick actions
                 HStack(spacing: 12) {
                     quickActionButton(
-                        icon: "speaker.slash.fill",
-                        action: { audioManager.muteAll() }
+                        icon: audioManager.activeAudioStreamId == nil ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                        action: { 
+                            if audioManager.activeAudioStreamId == nil {
+                                // If all muted, unmute first stream
+                                if let firstStream = streamManager.activeStreams.first(where: { $0.stream != nil })?.stream {
+                                    audioManager.setActiveAudioStream(firstStream.id)
+                                }
+                            } else {
+                                // Mute all
+                                audioManager.muteAll()
+                            }
+                        }
                     )
                     
                     quickActionButton(
@@ -218,6 +228,21 @@ struct ModernMultiStreamView: View {
     
     // MARK: - Modern Stream Grid
     private func modernStreamGrid(geometry: GeometryProxy) -> some View {
+        Group {
+            if streamManager.currentLayout == .stacked {
+                // Stacked layout with vertical scrolling
+                stackedStreamView(geometry: geometry)
+            } else {
+                // Grid layouts
+                gridStreamView(geometry: geometry)
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: streamManager.currentLayout)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: focusedStreamIndex)
+    }
+    
+    // MARK: - Grid View
+    private func gridStreamView(geometry: GeometryProxy) -> some View {
         let itemSize = calculateOptimalItemSize(geometry: geometry)
         
         return LazyVGrid(
@@ -228,38 +253,61 @@ struct ModernMultiStreamView: View {
             spacing: 16
         ) {
             ForEach(Array(streamManager.activeStreams.enumerated()), id: \.element.id) { index, slot in
-                ModernStreamSlot(
-                    slot: slot,
-                    index: index,
-                    isFocused: focusedStreamIndex == index,
-                    onTap: {
-                        selectedSlotIndex = index
-                        if slot.stream == nil {
-                            showingStreamPicker = true
-                        }
-                    },
-                    onRemove: {
-                        streamManager.removeStream(from: index)
-                    },
-                    onFocus: {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                            focusedStreamIndex = focusedStreamIndex == index ? nil : index
-                        }
-                    },
-                    onFullscreen: {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            selectedSlotIndex = index
-                            isFullscreenMode = true
-                        }
-                    }
-                )
-                .frame(width: itemSize.width, height: itemSize.height)
-                .scaleEffect(focusedStreamIndex == index ? 1.05 : 1.0)
-                .zIndex(focusedStreamIndex == index ? 1 : 0)
+                createStreamSlot(slot: slot, index: index, size: itemSize)
             }
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: streamManager.currentLayout)
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: focusedStreamIndex)
+    }
+    
+    // MARK: - Stacked View
+    private func stackedStreamView(geometry: GeometryProxy) -> some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 20) {
+                ForEach(Array(streamManager.activeStreams.enumerated()), id: \.element.id) { index, slot in
+                    createStreamSlot(
+                        slot: slot, 
+                        index: index, 
+                        size: CGSize(
+                            width: geometry.size.width - 32,
+                            height: (geometry.size.width - 32) * (9.0/16.0)
+                        )
+                    )
+                    .padding(.horizontal, 16)
+                }
+            }
+            .padding(.vertical, 16)
+        }
+    }
+    
+    // MARK: - Create Stream Slot
+    private func createStreamSlot(slot: StreamSlot, index: Int, size: CGSize) -> some View {
+        ModernStreamSlot(
+            slot: slot,
+            index: index,
+            isFocused: focusedStreamIndex == index,
+            onTap: {
+                selectedSlotIndex = index
+                if slot.stream == nil {
+                    showingStreamPicker = true
+                }
+            },
+            onRemove: {
+                streamManager.removeStream(from: index)
+            },
+            onFocus: {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                    focusedStreamIndex = focusedStreamIndex == index ? nil : index
+                }
+            },
+            onFullscreen: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    selectedSlotIndex = index
+                    isFullscreenMode = true
+                }
+            }
+        )
+        .frame(width: size.width, height: size.height)
+        .scaleEffect(focusedStreamIndex == index ? 1.05 : 1.0)
+        .zIndex(focusedStreamIndex == index ? 1 : 0)
     }
     
     // MARK: - Floating Controls
@@ -412,10 +460,11 @@ struct ModernStreamSlot: View {
     let onFocus: () -> Void
     let onFullscreen: () -> Void
     
-    @StateObject private var audioManager = MultiStreamAudioManager.shared
+    @StateObject private var audioManager = SimplifiedAudioManager.shared
     @State private var isMuted: Bool = true
     @State private var showingControls = false
     @State private var controlsOpacity: Double = 0
+    @State private var isAudioActive = false
     
     var body: some View {
         ZStack {
@@ -429,32 +478,82 @@ struct ModernStreamSlot: View {
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(
-                    isFocused ?
-                    LinearGradient(
-                        colors: [Color.purple, Color.cyan],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ) :
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.2)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: isFocused ? 3 : 1
+                    audioGradient,
+                    lineWidth: isAudioActive ? 3 : (isFocused ? 2 : 1)
                 )
         )
         .shadow(
-            color: isFocused ? Color.purple.opacity(0.3) : Color.black.opacity(0.2),
-            radius: isFocused ? 20 : 8,
+            color: shadowColor,
+            radius: shadowRadius,
             x: 0,
-            y: isFocused ? 8 : 4
+            y: shadowOffset
         )
         .onTapGesture { onTap() }
         .onLongPressGesture { onFocus() }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("AudioStreamChanged"))) { obj in
             let activeId = obj.object as? String
+            self.isAudioActive = activeId == slot.stream?.id
             self.isMuted = activeId != slot.stream?.id
         }
+        .onAppear {
+            if let streamId = slot.stream?.id {
+                audioManager.registerStream(streamId)
+                self.isAudioActive = audioManager.activeAudioStreamId == streamId
+                self.isMuted = audioManager.isStreamMuted(streamId)
+            }
+        }
+        .onDisappear {
+            if let streamId = slot.stream?.id {
+                audioManager.unregisterStream(streamId)
+            }
+        }
+    }
+    
+    // MARK: - Visual Properties
+    private var audioGradient: LinearGradient {
+        if isAudioActive {
+            return LinearGradient(
+                colors: [Color.green, Color.green.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else if isFocused {
+            return LinearGradient(
+                colors: [Color.purple, Color.cyan],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            return LinearGradient(
+                colors: [Color.white.opacity(0.2)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    
+    private var shadowColor: Color {
+        if isAudioActive {
+            return Color.green.opacity(0.4)
+        } else if isFocused {
+            return Color.purple.opacity(0.3)
+        } else {
+            return Color.black.opacity(0.2)
+        }
+    }
+    
+    private var shadowRadius: CGFloat {
+        if isAudioActive {
+            return 25
+        } else if isFocused {
+            return 20
+        } else {
+            return 8
+        }
+    }
+    
+    private var shadowOffset: CGFloat {
+        return isAudioActive || isFocused ? 8 : 4
     }
     
     private func activeStreamView(stream: TwitchStream) -> some View {
@@ -505,16 +604,31 @@ struct ModernStreamSlot: View {
         VStack {
             // Top controls
             HStack {
-                Text(stream.userName)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(.ultraThinMaterial)
-                    )
+                // Stream name with audio indicator
+                HStack(spacing: 6) {
+                    if isAudioActive {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                    
+                    Text(stream.userName)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule()
+                        .fill(isAudioActive ? Color.green.opacity(0.2) : .ultraThinMaterial)
+                        .overlay(
+                            Capsule()
+                                .stroke(isAudioActive ? Color.green.opacity(0.5) : Color.clear, lineWidth: 1)
+                        )
+                )
+                .animation(.easeInOut(duration: 0.2), value: isAudioActive)
                 
                 Spacer()
                 
@@ -537,16 +651,27 @@ struct ModernStreamSlot: View {
             // Bottom controls
             HStack {
                 Button(action: {
-                    audioManager.setActiveAudioStream(stream.id)
+                    if isAudioActive {
+                        // If this stream has audio, mute it
+                        audioManager.setActiveAudioStream(nil)
+                    } else {
+                        // Give this stream audio
+                        audioManager.setActiveAudioStream(stream.id)
+                    }
                 }) {
-                    Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(isMuted ? .white : .green)
-                        .frame(width: 32, height: 32)
-                        .background(
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                        )
+                    ZStack {
+                        Circle()
+                            .fill(isAudioActive ? Color.green.opacity(0.2) : .ultraThinMaterial)
+                        
+                        Image(systemName: isAudioActive ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(isAudioActive ? .green : .white)
+                    }
+                    .frame(width: 32, height: 32)
+                    .overlay(
+                        Circle()
+                            .stroke(isAudioActive ? Color.green : Color.clear, lineWidth: 2)
+                    )
                 }
                 .buttonStyle(ModernButtonStyle())
                 

@@ -20,6 +20,7 @@ struct EnhancedStreamSlotView: View {
     @State private var streamState: StreamPlaybackState = .loading
     @State private var viewerCount: Int = 0
     @State private var isLoading = true
+    @State private var loadingTimer: Timer?
     
     var body: some View {
         ZStack {
@@ -27,6 +28,16 @@ struct EnhancedStreamSlotView: View {
                 activeStreamView(stream: stream)
             } else {
                 emptyStreamView
+            }
+        }
+        .onChange(of: slot.stream?.id) { _ in
+            // Reset loading state when stream changes
+            withAnimation(.easeInOut) {
+                isLoading = true
+                streamState = .loading
+                viewerCount = 0
+                loadingTimer?.invalidate()
+                loadingTimer = nil
             }
         }
         .frame(width: size.width, height: size.height)
@@ -75,29 +86,59 @@ struct EnhancedStreamSlotView: View {
                         withAnimation(.easeInOut) {
                             streamState = .ready
                             isLoading = false
+                            loadingTimer?.invalidate()
+                            loadingTimer = nil
                         }
                     },
                     onStateChange: { state in
                         withAnimation(.easeInOut) {
                             streamState = state
+                            // If we're playing, ensure loading is false
+                            if state == .playing {
+                                isLoading = false
+                                loadingTimer?.invalidate()
+                                loadingTimer = nil
+                            }
                         }
                     },
                     onError: { error in
                         print("Stream error for \(channelName): \(error)")
                         streamState = .error
                         isLoading = false
+                        loadingTimer?.invalidate()
+                        loadingTimer = nil
                     },
                     onViewerUpdate: { count in
                         viewerCount = count
                     }
                 )
+                .onAppear {
+                    // Start loading timeout - if no response in 10 seconds, hide loading
+                    loadingTimer?.invalidate()
+                    loadingTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: false) { _ in
+                        withAnimation(.easeInOut) {
+                            if isLoading {
+                                print("Loading timeout for \(channelName) - hiding loading indicator")
+                                isLoading = false
+                                // If still in loading state, assume it's ready but slow
+                                if streamState == .loading {
+                                    streamState = .ready
+                                }
+                            }
+                        }
+                    }
+                }
+                .onDisappear {
+                    loadingTimer?.invalidate()
+                    loadingTimer = nil
+                }
                 .background(Color.black)
             } else {
                 errorView(message: "Invalid channel name")
             }
             
-            // Loading overlay
-            if isLoading || streamState.shouldShowLoadingIndicator {
+            // Loading overlay - only show if actually loading
+            if isLoading && streamState == .loading {
                 loadingOverlay
             }
             
